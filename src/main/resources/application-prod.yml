@@ -1,0 +1,43 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+  jpa:
+    show-sql: false
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD}
+  cache:
+    type: redis
+    redis:
+      time-to-live: ${CACHE_TTL:180s}
+      cache-null-values: false
+  thymeleaf:
+    cache: true
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+app:
+  demo:
+    seed-enabled: false
+logging:
+  level:
+    root: INFO

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Customers')}"></head>
+<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content">
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <section class="page-title-row"><div><span class="kicker">THE PEOPLE BEHIND THE BUSINESS</span><h1>Customers</h1><p class="page-lede">Keep the important details close. The good relationships follow.</p></div><a class="button button-primary" th:href="@{/customers/new}"><span class="button-plus">＋</span> Add customer</a></section>
+    <section class="panel list-panel">
+        <div class="list-toolbar"><div class="list-count"><span class="count-dot"></span><strong th:text="${#lists.size(customers)}">0</strong> customers</div>
+            <form class="search-form" method="get" th:action="@{/customers}"><span aria-hidden="true">⌕</span><input type="search" name="q" th:value="${q}" placeholder="Search names or emails" aria-label="Search customers"><button type="submit">Search</button><a th:if="${q != null and !q.isBlank()}" th:href="@{/customers}" class="clear-search">Clear</a></form>
+        </div>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>CUSTOMER</th><th>CONTACT</th><th>EMAIL</th><th>LOCATION</th><th>ADDED</th><th></th></tr></thead><tbody>
+            <tr th:each="customer : ${customers}"><td><a class="customer-cell" th:href="@{/customers/{id}(id=${customer.id})}"><span class="person-avatar" th:text="${#strings.substring(customer.companyName,0,1).toUpperCase()}">N</span><span class="customer-cell-copy"><strong th:text="${customer.companyName}">Northstar Studio</strong><small th:text="${customer.gstin != null ? customer.gstin : 'Business customer'}">Business customer</small></span></a></td><td th:text="${customer.contactName}">Maya Kapoor</td><td><a class="table-email" th:href="|mailto:${customer.email}|" th:text="${customer.email}">hello@example.com</a></td><td><span th:text="${customer.city != null ? customer.city : '—'}">Gurugram</span><span class="table-secondary" th:if="${customer.state != null}" th:text="${customer.state}">Haryana</span></td><td th:text="${customer.createdAt.toLocalDate()}">01 Jan 2026</td><td><a class="row-arrow" th:href="@{/customers/{id}(id=${customer.id})}" aria-label="View customer">↗</a></td></tr>
+            <tr th:if="${#lists.isEmpty(customers)}"><td colspan="6"><div class="empty-state"><span class="empty-icon">♙</span><h2 th:text="${q != null and !q.isBlank() ? 'No matching customers' : 'Every good relationship starts somewhere'}">No customers yet</h2><p th:text="${q != null and !q.isBlank() ? 'Try a different name or email address.' : 'Add a customer once. Their details are ready whenever you create an invoice.'}">Add customers here.</p><a class="button button-primary button-small" th:if="${q == null or q.isBlank()}" th:href="@{/customers/new}">Add your first customer <span>→</span></a></div></td></tr>
+        </tbody></table></div>
+    </section>
+    <footer class="page-footer"><span>Customer relationships, neatly in one place.</span><span th:text="${#lists.size(customers)} + ' shown'">0 shown</span></footer>
+</div></main></div></body></html>

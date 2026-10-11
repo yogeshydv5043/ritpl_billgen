@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: billgen-gateway
+  cloud:
+    discovery:
+      client:
+        simple:
+          instances:
+            billgen:
+              - uri: ${BILLGEN_A_URI:http://billgen-a:8080}
+              - uri: ${BILLGEN_B_URI:http://billgen-b:8080}
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: billgen-api
+              uri: lb://billgen
+              predicates:
+                - Path=/api/**
+              filters:
+                - AddRequestHeader=X-Gateway-Name, BillGen-API-Gateway
+server:
+  port: ${SERVER_PORT:8081}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO

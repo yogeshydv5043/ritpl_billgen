@@ -1,0 +1,34 @@
+package com.ritpl.billgen.web.form;
+
+import java.math.BigDecimal;
+import com.ritpl.billgen.entity.CatalogProduct;
+import com.ritpl.billgen.entity.ProductType;
+import com.ritpl.billgen.service.ProductCommand;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
+public class ProductForm {
+    @NotBlank @Size(max=50) @Pattern(regexp="[A-Za-z0-9._-]+") private String sku;
+    @NotBlank @Size(max=160) private String name;
+    @NotNull private ProductType productType = ProductType.SERVICE;
+    @Size(max=80) private String category;
+    @Size(max=500) private String description;
+    @NotNull @DecimalMin("0.00") @Digits(integer=12,fraction=2) private BigDecimal unitPrice = BigDecimal.ZERO;
+    @NotNull @DecimalMin("0.00") @DecimalMax("100.00") @Digits(integer=3,fraction=2) private BigDecimal taxRate = new BigDecimal("18.00");
+    private boolean active = true;
+    public static ProductForm from(CatalogProduct p) {
+        ProductForm f=new ProductForm(); f.sku=p.getSku(); f.name=p.getName(); f.productType=p.getProductType(); f.category=p.getCategory();
+        f.description=p.getDescription(); f.unitPrice=p.getUnitPrice(); f.taxRate=p.getTaxRate(); f.active=p.isActive(); return f;
+    }
+    public ProductCommand toCommand(){return new ProductCommand(sku,name,productType,category,description,unitPrice,taxRate,active);}
+    public String getSku(){return sku;} public void setSku(String v){sku=v;} public String getName(){return name;} public void setName(String v){name=v;}
+    public ProductType getProductType(){return productType;} public void setProductType(ProductType v){productType=v;}
+    public String getCategory(){return category;} public void setCategory(String v){category=v;} public String getDescription(){return description;} public void setDescription(String v){description=v;}
+    public BigDecimal getUnitPrice(){return unitPrice;} public void setUnitPrice(BigDecimal v){unitPrice=v;} public BigDecimal getTaxRate(){return taxRate;} public void setTaxRate(BigDecimal v){taxRate=v;}
+    public boolean isActive(){return active;} public void setActive(boolean v){active=v;}
+}

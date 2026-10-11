@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/layout :: head('Overview')}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content">
+            <div th:replace="~{fragments/layout :: flash}"></div>
+            <section class="welcome-row">
+                <div><span class="kicker">YOUR BILLING, WITHOUT THE GUESSWORK</span><h1>Your business at a glance<span class="heading-spark">✳</span></h1><p class="page-lede">Here’s what’s happening with your billing today.</p></div>
+                <a class="button button-primary" th:href="@{/invoices/new}"><span class="button-plus">＋</span> Create an invoice</a>
+            </section>
+            <section class="metrics-grid" aria-label="Billing summary">
+                <article class="metric-card metric-highlight"><div class="metric-top"><span class="metric-icon icon-violet">↗</span><span class="metric-period">ALL TIME</span></div><p class="metric-label">Paid revenue</p><div class="metric-value"><span class="currency-prefix">₹</span><span th:text="${#numbers.formatDecimal(stats.paidRevenue,1,'COMMA',2,'POINT')}">0.00</span></div><span class="metric-foot"><i class="tiny-positive"></i> Recorded payments</span><div class="metric-sparkline spark-violet"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></article>
+                <article class="metric-card"><div class="metric-top"><span class="metric-icon icon-blue">▤</span><span class="metric-arrow">↗</span></div><p class="metric-label">Outstanding</p><div class="metric-value"><span class="currency-prefix">₹</span><span th:text="${#numbers.formatDecimal(stats.outstanding,1,'COMMA',2,'POINT')}">0.00</span></div><span class="metric-foot">Across sent invoices</span><div class="metric-sparkline spark-blue"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></article>
+                <article class="metric-card"><div class="metric-top"><span class="metric-icon icon-amber">◷</span><span class="metric-arrow">↗</span></div><p class="metric-label">Past due</p><div class="metric-value"><span th:text="${stats.overdueCount}">0</span><small>invoices</small></div><span class="metric-foot">Need a gentle nudge</span><div class="metric-sparkline spark-amber"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></article>
+                <article class="metric-card"><div class="metric-top"><span class="metric-icon icon-green">♙</span><span class="metric-arrow">↗</span></div><p class="metric-label">Customers</p><div class="metric-value"><span th:text="${stats.customerCount}">0</span><small>in your book</small></div><span class="metric-foot">Relationships in motion</span><div class="metric-sparkline spark-green"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></article>
+            </section>
+            <section class="dashboard-grid">
+                <article class="panel invoice-panel">
+                    <div class="panel-heading"><div><span class="kicker">THE LATEST</span><h2>Recent invoices</h2></div><a class="text-link" th:href="@{/invoices}">All invoices <span>→</span></a></div>
+                    <div class="table-wrap"><table class="data-table"><thead><tr><th>INVOICE</th><th>CUSTOMER</th><th>ISSUED</th><th>AMOUNT</th><th>STATUS</th><th></th></tr></thead>
+                        <tbody><tr th:each="invoice : ${recentInvoices}"><td><a class="table-primary" th:href="@{/invoices/{id}(id=${invoice.id})}" th:text="${invoice.invoiceNumber}">INV-001001</a></td><td><span class="table-primary" th:text="${invoice.customer.companyName}">Northstar Studio</span><span class="table-secondary" th:text="${invoice.customer.contactName}">Maya Kapoor</span></td><td th:text="${invoice.issueDate}">2026-01-01</td><td class="table-amount"><span th:text="${invoice.currency}">INR</span> <span th:text="${#numbers.formatDecimal(invoice.totalAmount,1,'COMMA',2,'POINT')}">0.00</span></td><td><span class="status-pill" th:classappend="| status-${#strings.toLowerCase(invoice.status.name())}|" th:text="${invoice.status}">SENT</span></td><td><a class="row-arrow" th:href="@{/invoices/{id}(id=${invoice.id})}" aria-label="Open invoice">↗</a></td></tr>
+                        <tr th:if="${#lists.isEmpty(recentInvoices)}"><td colspan="6"><div class="empty-inline"><span class="empty-icon">▤</span><strong>Your next invoice starts here.</strong><span>Create one in a couple of minutes.</span><a th:href="@{/invoices/new}">Create an invoice <span>→</span></a></div></td></tr></tbody>
+                    </table></div>
+                </article>
+                <aside class="dashboard-side">
+                    <article class="welcome-card"><div class="welcome-card-top"><span class="welcome-art">✦</span><span class="tag tag-light">YOUR WORKSPACE</span></div><h3>Good work deserves<br>a good invoice.</h3><p>Keep the details tidy and the relationships even better.</p><a th:href="@{/invoices/new}">Make your next one <span>→</span></a><div class="welcome-orbit orbit-one"></div><div class="welcome-orbit orbit-two"></div></article>
+                    <article class="panel people-panel"><div class="panel-heading"><div><span class="kicker">YOUR PEOPLE</span><h2>Customers</h2></div><a class="icon-link" th:href="@{/customers}" aria-label="All customers">↗</a></div>
+                        <div class="people-list"><a class="person-row" th:each="customer : ${customers}" th:href="@{/customers/{id}(id=${customer.id})}"><span class="person-avatar" th:text="${#strings.substring(customer.companyName,0,1).toUpperCase()}">N</span><span class="person-details"><strong th:text="${customer.companyName}">Northstar Studio</strong><small th:text="${customer.email}">hello@example.com</small></span><span class="person-arrow">→</span></a><div class="empty-inline empty-compact" th:if="${#lists.isEmpty(customers)}">Your customer list is ready when you are.</div></div>
+                        <a class="people-footer" th:href="@{/customers/new}">Add a customer <span>＋</span></a>
+                    </article>
+                </aside>
+            </section>
+            <footer class="page-footer"><span>Good billing. Better business.</span><a th:href="@{/plans}">Explore plans ↗</a></footer>
+        </div>
+    </main>
+</div>
+</body>
+</html>
