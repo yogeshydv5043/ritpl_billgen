@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Sign in')}"></head>
+<body class="auth-body">
+    <div class="auth-ambient ambient-one"></div><div class="auth-ambient ambient-two"></div>
+    <main class="auth-shell">
+        <section class="auth-story">
+            <a class="brand brand-on-dark" th:href="@{/plans}"><span class="brand-mark">b<span>.</span></span><span class="brand-copy"><strong>billgen</strong><small>INVOICE STUDIO</small></span></a>
+            <div class="auth-story-copy">
+                <span class="kicker kicker-light"><i></i> BILLING, WITH CLARITY</span>
+                <h1>Good business<br>deserves <em>good billing.</em></h1>
+                <p>A calmer way to create invoices, keep customers close and understand what’s coming in.</p>
+                <div class="story-stat"><div class="story-avatars"><span>NS</span><span>MW</span><span>+8</span></div><span>Made for the people<br>building what’s next.</span></div>
+            </div>
+            <div class="auth-story-foot"><span>Thoughtful billing for growing businesses</span><span>© 2026 BillGen</span></div>
+        </section>
+        <section class="auth-panel">
+            <div class="auth-card">
+                <div class="auth-mobile-brand"><span class="brand-mark">b<span>.</span></span><strong>billgen</strong></div>
+                <span class="kicker">WELCOME BACK</span>
+                <h2>Sign in to your<br>workspace</h2>
+                <p class="auth-subtitle">Pick up right where you left off.</p>
+                <div class="notice notice-error" th:if="${param.error}">We couldn’t sign you in with those details. Please try again.</div>
+                <div class="notice notice-success" th:if="${param.logout}">You’ve been signed out securely.</div>
+                <form th:action="@{/login}" method="post" class="stack-form">
+                    <label for="username">Email address</label>
+                    <div class="input-with-icon"><span aria-hidden="true">✉</span><input id="username" name="username" type="email" autocomplete="username" placeholder="you@company.com" required autofocus></div>
+                    <div class="label-row"><label for="password">Password</label><span class="field-hint">Use your workspace password</span></div>
+                    <div class="input-with-icon"><span aria-hidden="true">⌑</span><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required></div>
+                    <button class="button button-primary button-wide button-tall" type="submit">Sign in <span>→</span></button>
+                </form>
+                <p class="auth-note">Need an account? Ask your workspace administrator.</p>
+                <a class="auth-public-link" th:href="@{/plans}">Take a look around <span>↗</span></a>
+            </div>
+            <footer class="auth-footer">Secure sign-in <span>·</span> Your data stays yours</footer>
+        </section>
+    </main>
+</body>
+</html>

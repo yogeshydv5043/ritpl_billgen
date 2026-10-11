@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: "${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/${POSTGRES_DB:billgen}}"
+    username: ${SPRING_DATASOURCE_USERNAME:${POSTGRES_USER:billgen}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${POSTGRES_PASSWORD:billgen_dev_only}}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:5}
+  jpa:
+    show-sql: false
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:${REDIS_PASSWORD:}}
+  thymeleaf:
+    cache: false
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false
+app:
+  demo:
+    seed-enabled: ${APP_DEMO_SEED_ENABLED:true}

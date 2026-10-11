@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(${formTitle})}"></head>
+<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content page-content-narrow">
+    <div class="breadcrumb"><a th:href="@{/customers}">Customers</a><span>/</span><span th:text="${formTitle}">Add customer</span></div>
+    <section class="page-title-row compact-title"><div><span class="kicker">YOUR CUSTOMER BOOK</span><h1 th:text="${formTitle}">Add customer</h1><p class="page-lede">Just the essentials. You can fill in the rest whenever you need.</p></div></section>
+    <form class="panel form-panel" th:action="@{${formAction}}" th:object="${customerForm}" method="post" novalidate>
+        <div class="form-intro"><span class="form-step">01</span><div><h2>Business details</h2><p>Who are you billing?</p></div></div>
+        <div class="form-grid">
+            <div class="field field-full"><label for="companyName">Company or customer name <span class="required">*</span></label><input id="companyName" th:field="*{companyName}" placeholder="e.g. Northstar Studio" autocomplete="organization"><small class="field-error" th:if="${#fields.hasErrors('companyName')}" th:errors="*{companyName}"></small></div>
+            <div class="field"><label for="contactName">Primary contact <span class="required">*</span></label><input id="contactName" th:field="*{contactName}" placeholder="e.g. Maya Kapoor" autocomplete="name"><small class="field-error" th:if="${#fields.hasErrors('contactName')}" th:errors="*{contactName}"></small></div>
+            <div class="field"><label for="email">Email address <span class="required">*</span></label><input id="email" type="email" th:field="*{email}" placeholder="accounts@company.com" autocomplete="email"><small class="field-error" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></small></div>
+            <div class="field"><label for="phone">Phone number</label><input id="phone" type="tel" th:field="*{phone}" placeholder="+91 98765 43210" autocomplete="tel"><small class="field-error" th:if="${#fields.hasErrors('phone')}" th:errors="*{phone}"></small></div>
+            <div class="field"><label for="gstin">GSTIN <span class="optional">OPTIONAL</span></label><input id="gstin" th:field="*{gstin}" placeholder="15-character GSTIN" autocapitalize="characters"><small class="field-error" th:if="${#fields.hasErrors('gstin')}" th:errors="*{gstin}"></small></div>
+        </div>
+        <div class="form-divider"></div>
+        <div class="form-intro"><span class="form-step form-step-soft">02</span><div><h2>Billing address</h2><p>Shown on the invoice where needed.</p></div></div>
+        <div class="form-grid">
+            <div class="field field-full"><label for="billingAddress">Street address</label><input id="billingAddress" th:field="*{billingAddress}" placeholder="Building, street and area" autocomplete="street-address"><small class="field-error" th:if="${#fields.hasErrors('billingAddress')}" th:errors="*{billingAddress}"></small></div>
+            <div class="field"><label for="city">City</label><input id="city" th:field="*{city}" placeholder="City" autocomplete="address-level2"><small class="field-error" th:if="${#fields.hasErrors('city')}" th:errors="*{city}"></small></div>
+            <div class="field"><label for="state">State</label><input id="state" th:field="*{state}" placeholder="State" autocomplete="address-level1"><small class="field-error" th:if="${#fields.hasErrors('state')}" th:errors="*{state}"></small></div>
+            <div class="field"><label for="postalCode">Postal code</label><input id="postalCode" th:field="*{postalCode}" placeholder="Postal code" autocomplete="postal-code"><small class="field-error" th:if="${#fields.hasErrors('postalCode')}" th:errors="*{postalCode}"></small></div>
+            <div class="field"><label for="country">Country <span class="required">*</span></label><input id="country" th:field="*{country}" placeholder="India" autocomplete="country-name"><small class="field-error" th:if="${#fields.hasErrors('country')}" th:errors="*{country}"></small></div>
+        </div>
+        <div class="global-errors" th:if="${#fields.hasGlobalErrors()}"><p th:each="err : ${#fields.globalErrors()}" th:text="${err}">Please check the details.</p></div>
+        <div class="form-actions"><a class="button button-quiet" th:href="@{/customers}">Cancel</a><button class="button button-primary" type="submit">Save customer <span>→</span></button></div>
+    </form>
+    <p class="form-footnote"><span>⌑</span> Customer information is kept securely in your workspace.</p>
+</div></main></div></body></html>

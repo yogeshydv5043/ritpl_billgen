@@ -1,0 +1,17 @@
+# Maven build outputs
+**/target/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Editors / operating systems
+.idea/
+.vscode/
+.DS_Store
+*.iml
+
+# Logs and generated archives
+*.log
+*.zip

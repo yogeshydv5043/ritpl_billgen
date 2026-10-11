@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:fragment="head(title)">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#17172f">
+    <title th:text="${title} + ' · BillGen'">BillGen</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <script defer th:src="@{/js/app.js}"></script>
+</head>
+<body>
+<aside th:fragment="sidebar" class="sidebar" id="sidebar" aria-label="Primary navigation">
+    <a class="brand" th:href="@{/dashboard}" aria-label="BillGen home">
+        <span class="brand-mark">b<span>.</span></span>
+        <span class="brand-copy"><strong>billgen</strong><small>INVOICE STUDIO</small></span>
+    </a>
+    <button class="sidebar-close" type="button" aria-label="Close navigation" onclick="BillGen.toggleNav(false)">×</button>
+    <div class="nav-label">WORKSPACE</div>
+    <nav class="nav-links">
+        <a th:href="@{/dashboard}" sec:authorize="hasAnyRole('ADMIN','FINANCE')"><span class="nav-icon">⌂</span><span>Overview</span></a>
+        <a th:href="@{/invoices}" sec:authorize="hasAnyRole('ADMIN','FINANCE')"><span class="nav-icon">▤</span><span>Invoices</span></a>
+        <a th:href="@{/customers}" sec:authorize="hasAnyRole('ADMIN','FINANCE')"><span class="nav-icon">♙</span><span>Customers</span></a>
+        <a th:href="@{/products}" sec:authorize="hasAnyRole('ADMIN','FINANCE')"><span class="nav-icon">◇</span><span>Catalogue</span></a>
+        <a th:href="@{/admin/plans}" sec:authorize="hasRole('ADMIN')"><span class="nav-icon">✳</span><span>Plans</span></a>
+        <a th:href="@{/portal}" sec:authorize="hasRole('CUSTOMER')"><span class="nav-icon">▣</span><span>My invoices</span></a>
+    </nav>
+    <div class="sidebar-spacer"></div>
+    <a class="sidebar-help" th:href="@{/plans}">
+        <span class="help-orb">✦</span><span><strong>Built for better billing</strong><small>Explore the plans</small></span><span class="help-arrow">↗</span>
+    </a>
+    <div class="sidebar-foot"><span class="online-dot"></span> All systems operational</div>
+</aside>
+<header th:fragment="topbar" class="topbar">
+    <button class="mobile-menu" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" onclick="BillGen.toggleNav()"><span></span><span></span></button>
+    <div class="topbar-context"><span class="eyebrow">BILLING WORKSPACE</span><span class="topbar-date">A clearer view of your cash flow</span></div>
+    <div class="topbar-actions">
+        <a class="topbar-shortcut" th:href="@{/invoices/new}" sec:authorize="hasAnyRole('ADMIN','FINANCE')"><span>＋</span> New invoice</a>
+        <span class="topbar-separator"></span>
+        <div class="user-chip"><span class="user-avatar" th:text="${#strings.substring(#authentication.name,0,1).toUpperCase()}">B</span><span class="user-email" sec:authentication="name">user@example.com</span></div>
+        <form th:action="@{/logout}" method="post"><button class="logout-button" type="submit" title="Sign out" aria-label="Sign out">↗</button></form>
+    </div>
+</header>
+<div th:fragment="flash" class="flash-stack" aria-live="polite">
+    <div class="flash flash-success" th:if="${successMessage}" th:text="${successMessage}"></div>
+    <div class="flash flash-error" th:if="${errorMessage}" th:text="${errorMessage}"></div>
+</div>
+</body>
+</html>
