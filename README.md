@@ -42,16 +42,24 @@ docker compose down
 Requirements: JDK 17+, Maven 3.9+, PostgreSQL and Redis.
 
 1. Create a PostgreSQL database/user and start Redis.
-2. Set `SPRING_PROFILES_ACTIVE=dev`, `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, and (if needed) `SPRING_DATA_REDIS_HOST` / `SPRING_DATA_REDIS_PORT`.
-3. Run the web application:
+2. Copy `.env.example` to `.env`. Spring Boot now reads that local file when run from the project directory; by default it expects PostgreSQL user `billgen` with password `billgen_dev_only`. Set `POSTGRES_PASSWORD` in `.env` to the password already assigned to your local `billgen` role, or set `SPRING_DATASOURCE_PASSWORD` in your shell to override it.
+3. Activate the dev profile and run the web application:
 
    ```bash
+   # macOS / Linux
+   export SPRING_PROFILES_ACTIVE=dev
+   mvn spring-boot:run
+   ```
+
+   ```powershell
+   # Windows PowerShell
+   $env:SPRING_PROFILES_ACTIVE = "dev"
    mvn spring-boot:run
    ```
 
 4. Open <http://localhost:8080>.
 
-The development profile defaults to `jdbc:postgresql://localhost:5432/billgen`, user/password `billgen`, Redis at `localhost:6379`, and demo seeding enabled. Flyway creates the schema on first startup. Hibernate validates the schema; it does not create or update tables.
+The development profile defaults to `jdbc:postgresql://localhost:5432/billgen`, PostgreSQL user `billgen` / password `billgen_dev_only`, Redis at `localhost:6379`, and demo seeding enabled. Override these with matching PostgreSQL role credentials if your local database was initialized differently. If startup reports SQL state `28P01`, follow the [database authentication troubleshooting steps](docs/setup.md#troubleshooting-postgresql-password-authentication) to align the app setting and role password. Flyway creates the schema on first startup. Hibernate validates the schema; it does not create or update tables.
 
 To run the gateway separately, build and start the `gateway/` Maven project after starting BillGen. Set `BILLGEN_A_URI` and `BILLGEN_B_URI` to reachable application instances. For the complete reverse-proxy/load-balancer setup, use Docker Compose.
 
@@ -69,7 +77,7 @@ To run the gateway separately, build and start the `gateway/` Maven project afte
 
 ## Configuration
 
-Copy `.env.example` to `.env` for local Compose overrides. Never put production secrets in Git. The main profiles are:
+Copy `.env.example` to `.env` for local Compose and standalone development overrides. Never put production secrets in Git. The main profiles are:
 
 - `dev`: local-friendly defaults and optional demo data.
 - `prod`: requires PostgreSQL/Redis connection settings, enables secure session cookies and disables demo seeding.
