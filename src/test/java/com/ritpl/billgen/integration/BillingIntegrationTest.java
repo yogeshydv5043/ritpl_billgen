@@ -218,6 +218,12 @@ class BillingIntegrationTest {
                 record.getCustomer() == null ? firstCustomerId : record.getCustomer().getId(),
                 "every row the tenant can read belongs to that tenant"));
 
+        Page<AuditRecord> filtered = auditService.search(first.scope(),
+                new AuditFilter(null, "owner", "CREATE", "INVOICE", "SUCCESS",
+                        java.time.Instant.now().minusSeconds(300), java.time.Instant.now().plusSeconds(300)),
+                PageRequest.of(0, 20));
+        assertTrue(filtered.getTotalElements() >= 1, "an actor, outcome and date range narrow the same tenant's rows");
+
         Page<AuditRecord> otherAudit = auditService.search(second.scope(),
                 new AuditFilter(null, null, "CREATE", "INVOICE", null, null, null), PageRequest.of(0, 20));
         assertEquals(0, otherAudit.getTotalElements(), "another tenant's activity is not visible or exportable");

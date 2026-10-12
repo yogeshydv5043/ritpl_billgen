@@ -14,13 +14,16 @@ public interface AuditRecordRepository extends JpaRepository<AuditRecord, Long> 
     java.util.Optional<AuditRecord> findWithCustomerById(Long id);
 
     @EntityGraph(attributePaths = "customer")
+    // The optional filters are typed explicitly. A bare `:param is null` guard sends PostgreSQL an
+    // untyped null ("could not determine data type of parameter", and `'%' || ?` planning as bytea
+    // concatenation), which would break the audit list for any filter the caller left empty.
     @Query("select a from AuditRecord a where (:customerId is null or a.customer.id = :customerId) "
-            + "and (:actor is null or lower(a.actor) like lower(concat('%', cast(:actor as string), '%'))) "
+            + "and (cast(:actor as string) is null or lower(a.actor) like lower(concat('%', cast(:actor as string), '%'))) "
             + "and (:action is null or a.action = :action) "
             + "and (:resourceType is null or a.resourceType = :resourceType) "
             + "and (:outcome is null or a.outcome = :outcome) "
-            + "and (:fromTime is null or a.createdAt >= :fromTime) "
-            + "and (:untilTime is null or a.createdAt < :untilTime) order by a.createdAt desc")
+            + "and (cast(:fromTime as timestamp) is null or a.createdAt >= :fromTime) "
+            + "and (cast(:untilTime as timestamp) is null or a.createdAt < :untilTime) order by a.createdAt desc")
     Page<AuditRecord> search(@Param("customerId") Long customerId, @Param("actor") String actor,
             @Param("action") String action, @Param("resourceType") String resourceType,
             @Param("outcome") String outcome, @Param("fromTime") Instant fromTime,
