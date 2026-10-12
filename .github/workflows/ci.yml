@@ -76,7 +76,7 @@ jobs:
             for (const log of ['/tmp/mvn-compile.log', '/tmp/mvn-test.log', '/tmp/mvn-package.log']) {
               if (fs.existsSync(log)) {
                 const text = fs.readFileSync(log, 'utf8').split('\n').filter(line =>
-                  /ERROR|BUILD|Tests run|\.java:\[|Failed to execute|Caused by/.test(line)).slice(-120).join('\n');
+                  /ERROR|BUILD|Tests run|\.java:\[|Failed to execute|Caused by|symbol:|location:|required:|found:/.test(line)).slice(-160).join('\n');
                 if (text.trim()) chunks.push(`#### ${log}\n\n\`\`\`\n${text}\n\`\`\``);
               }
             }
