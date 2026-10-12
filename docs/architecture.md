@@ -37,7 +37,7 @@ The Compose configuration has two independently running Spring Boot application 
 The application has exactly two roles:
 
 - `ADMIN`: may manage customer accounts, plans and templates; may read records across all customer accounts; has read-only access to customer-owned invoices, products and categories.
-- `CUSTOMER`: a login linked to exactly one customer account. The customer can access and modify only its own account's invoices, products and categories, and can use only templates in its active purchased plan.
+- `CUSTOMER`: a login linked to exactly one customer account. The customer can access and modify only its own account's invoices, products, categories and custom templates, and can create invoices with templates bundled in its active plan or its own active custom templates.
 
 The `TenantScope` is built server-side from the authenticated principal. A customer ID in a URL, form or API body never widens that scope. Cross-tenant record IDs are returned as `404` to avoid exposing whether another tenant's record exists. API and browser services enforce the same scope, so UI hiding is not the security boundary.
 
@@ -48,19 +48,21 @@ The `TenantScope` is built server-side from the authenticated principal. A custo
 - `subscription_plans` stores the plan catalogue, prices and feature text.
 - `bill_templates` stores admin-managed template identity, active availability and one of the print renderer styles.
 - `plan_templates` is a many-to-many relation: a plan may include multiple templates, and a template may be part of multiple plans.
-- `customer_subscriptions` stores customer plan activations, status and dates. There is at most one active subscription per account.
+- `customer_subscriptions` stores customer plan activations, status, term dates, limit overrides and invoice-usage carry-forward. There is at most one active subscription per account.
 - `product_categories` belongs to one customer account; `(customer_id, name)` is unique.
 - `catalog_products` belongs to one customer account and optionally references a category owned by that same account. SKU uniqueness is scoped to `(customer_id, sku)`.
-- `invoices` belongs to the customer account that generated it and references its selected template. The service validates template entitlement on create.
-- `invoice_items` stores a snapshot of description, quantity, unit price, tax rate and computed line amounts, and carries the customer id directly. A composite foreign key ensures each line's tenant matches its parent invoice. A later catalogue edit does not change an issued invoice.
+- `custom_invoice_templates` stores customer-owned designs within the active plan's custom-template limit.
+- `invoices` belongs to the customer account that generated it and stores line totals, flat discount, status, allowance attribution, company/logo snapshots and template snapshots. The service validates template entitlement and computes financial values on create.
+- `invoice_items` stores a snapshot of description, quantity, unit price, tax rate and computed line amounts, and carries the customer id directly. A composite foreign key ensures each line's tenant matches its parent invoice. Later company-profile or catalogue edits do not change an existing invoice.
+- `audit_records` is append-only, indexed by tenant and timestamp, and protected from database updates/deletes by a trigger. Notification logs track in-app expiry reminders and read status.
 
-Flyway migration `V1__create_billgen_schema.sql` creates the original schema. `V2__plans_templates_and_tenant_isolation.sql` migrates roles, templates, plans, subscriptions and customer-owned catalogues. Existing Finance accounts are promoted to Admin. Any old globally shared catalogue items are moved to a hidden internal account rather than assigned to an arbitrary customer.
+Flyway migration `V1__create_billgen_schema.sql` creates the original schema. `V2__plans_templates_and_tenant_isolation.sql` migrates roles, templates, plans, subscriptions and customer-owned catalogues. `V3` adds usage-limit overrides, audit records and expiry-notification logs; `V4` records invoice allowance attribution and the ten-calendar-month report window; `V5` adds company/logo and template snapshots; `V6` adds tenant-owned custom templates. Existing Finance accounts are promoted to Admin. Any old globally shared catalogue items are moved to a hidden internal account rather than assigned to an arbitrary customer.
 
 ## Template entitlement enforcement
 
 An Admin creates templates, assigns one or more active templates to a plan, and controls plan/template availability. A customer chooses an active plan in its portal, or an Admin assigns one. Template access is computed from the current active subscription and that plan's active templates. The same check is enforced in the invoice service for both MVC and API requests, not just in the template selector. A customer cannot forge a template ID or submit another customer's account ID to create an invoice.
 
-Template activation and subscription activation happen immediately in this starter; payment checkout is intentionally not implemented. Deactivating a plan or template removes it from customer selection and invoice creation. Existing invoices retain a reference to the template they were created with so print views continue to work.
+Plan selection/renewal and subscription assignment activate immediately; there is no checkout or payment gateway. Deactivating a plan or bundled standard template removes it from customer selection and new invoice creation. Customers can also create plan-limited custom templates. Existing invoices keep company/logo and template presentation snapshots so profile/template edits do not alter historical print views.
 
 ## Tenant isolation
 
@@ -71,17 +73,29 @@ Template activation and subscription activation happen immediately in this start
 - Updates, status transitions, deletes and category assignment validate that the target belongs to the authenticated customer. Categories may only be attached to products of the same customer.
 - Admin writes to customer-owned records are blocked; Admin plan/template/account management is separate from those tenant write paths.
 
-## Invoice calculations and states
+## Invoice calculations, quota and lifecycle
 
-Each line subtotal is quantity × unit price, rounded to two decimal places using HALF_UP. Tax is calculated per line on that rounded subtotal and rounded to two decimal places using HALF_UP. The invoice subtotal, tax and total are sums of the persisted line values.
+Each line subtotal is quantity × unit price, rounded to two decimal places using HALF_UP. Tax is calculated per line on that rounded subtotal and rounded to two decimal places using HALF_UP. The invoice subtotal and tax are sums of persisted line values. A flat, non-negative discount (maximum two decimal places) is subtracted after all line taxes and cannot exceed the pre-discount total. The server calculates all values; submitted totals are never trusted.
 
 Supported lifecycle transitions are:
 
 ```text
 DRAFT → SENT → PAID
+  └──────→ CANCELLED
+SENT ────→ CANCELLED
 ```
 
-A new invoice can start as Draft or Sent. A Sent invoice can be recorded as Paid. Amounts and line snapshots are not edited in place after creation; create a follow-up invoice for adjustments. The due-date check requires due date ≥ issue date.
+Drafts do not consume invoice allowance. Creating an invoice as Sent or issuing a Draft consumes one slot for the current subscription term. Marking it Paid does not add another slot, and cancelling an issued invoice never restores its slot; cancelling a Draft consumes none. A term change while the current term is unexpired carries issued-invoice usage into the new term. A new term after expiry starts at zero. Subscription and usage rows are locked during quota-sensitive writes so simultaneous invoice issues cannot overspend the allowance.
+
+A customer may choose an available plan without checkout; an Admin may assign or override limits. Plan changes take effect immediately. Cancelling a subscription withdraws access to new invoices and plan templates; expired/cancelled subscriptions retain read access to historical invoices. A customer must renew or select an available plan to create new billing data. Expiry reminders are generated in-app seven, three and one day before expiry, plus an expired notice; reminders are deduplicated per subscription and offset. Product and custom-template limits are enforced when adding items/templates; reducing a limit does not invalidate existing custom templates, but blocks further creation until usage falls below the limit.
+
+Amounts and line snapshots are not edited in place after creation; create a follow-up invoice for adjustments. The due-date check requires due date ≥ issue date.
+
+## Audit trail and exports
+
+Successful account, company-profile, product/category, invoice, subscription, plan/template, notification and export mutations are recorded with actor, outcome, tenant (when applicable), timestamp and allow-listed before/after summaries. Failed invoice create/issue and export attempts are recorded without persisting exception messages or credentials. Audit detail/list access and audit exports are themselves logged. Customers can only view/export their own tenant's audit records; Admin audit access is role-protected. The application exposes no audit edit/delete routes, and a PostgreSQL trigger rejects direct row updates/deletes. Audit payloads omit passwords, authentication tokens/secrets and payment credentials.
+
+Product, invoice-report and audit XLSX exports reuse the corresponding tenant/admin authorization scope. The invoice report covers the current calendar month plus the previous nine, using the configured subscription timezone; it separates term allowance usage from monthly generation counts and groups financial totals by currency. Untrusted values are emitted as explicit text cells and formula-like prefixes are escaped to reduce spreadsheet formula-injection risk.
 
 ## Redis
 
@@ -92,4 +106,4 @@ A new invoice can start as Draft or Sent. A Sent invoice can be recorded as Paid
 
 ## Deliberate starter limitations
 
-The app immediately activates customer-selected plans but does not collect or reconcile payments. It does not send invoice email, generate PDFs on the server, split GST into CGST/SGST, apply exchange rates, configure an issuer-company profile, or implement tax compliance. Invoice print can be saved as PDF through the browser. Review the application and add payment/tax controls before production accounting use.
+The Customer account's company profile (including logo) is the invoice identity; there is no separate client list. The app immediately activates customer-selected plans but does not collect or reconcile payments. It does not send invoice email, generate PDFs on the server, split GST into CGST/SGST, apply exchange rates, or implement tax compliance. Invoice print can be saved as PDF through the browser. Review tax/legal requirements before production accounting use.

@@ -1,8 +1,8 @@
 # BillGen
 
-BillGen is a multi-tenant billing and invoice workspace built with Java 17, Spring Boot, PostgreSQL, Redis, Spring Security and Thymeleaf. It includes customer account isolation, customer-owned products and categories, admin-managed invoice templates and plans, plan-based template entitlements, invoice creation and print-ready views, an authenticated REST API, a Spring Cloud API gateway, and an Nginx reverse proxy/load balancer.
+BillGen is a multi-tenant billing and invoice workspace built with Java 17, Spring Boot, PostgreSQL, Redis, Spring Security and Thymeleaf. It includes tenant-isolated customer workspaces, company profiles and logo snapshots, products and categories, plan/template entitlements and quotas, server-calculated invoices and discounts, subscription expiry reminders, protected audit trails, scoped Excel exports, an authenticated REST API, a Spring Cloud API gateway, and an Nginx reverse proxy/load balancer.
 
-> **Project status:** the application enforces customer data isolation and plan/template entitlements. Customers can activate an available plan from their portal, or an Admin can assign a plan. Activation is immediate; payment checkout, outbound email delivery and server-side PDF generation are not included. Invoice print views can be saved as PDF in the browser.
+> **Project status:** the application has exactly two roles: Admin (`ADMIN`) and Customer (`CUSTOMER`). Customers can activate an available plan from their portal, or an Admin can assign a plan. Activation is immediate; payment checkout, outbound email delivery and server-side PDF generation are not included. Invoice print views can be saved as PDF in the browser.
 
 ## Quick start with Docker Compose
 
@@ -59,12 +59,16 @@ To run the gateway separately, build and start the `gateway/` Maven project afte
 ## Roles and features
 
 - **Admin:** customer account provisioning, plan and template management, cross-account read-only data access, invoice/product/category statistics and subscription management.
-- **Customer:** private workspace for its own invoices, products and categories; can activate an available plan and generate invoices using only active templates included in that plan.
+- **Customer:** private workspace for its own invoices, products, categories and custom templates; can activate an available plan and generate invoices using templates in that plan or its own active custom templates.
 - **Templates and plans:** Admins create templates, assign multiple templates to a plan, and control availability. A customer subscription grants template access; hiding a template or cancelling the plan immediately withdraws that access.
-- **Invoices:** multiple line items, quantity, unit price, line-level tax, due dates, draft/sent/paid states, currency and notes. The customer account is derived from the authenticated session, and the chosen template is validated on the server.
+- **Invoices:** multiple line items, quantity, unit price, line-level tax, flat post-tax discount, due dates, draft/sent/paid/cancelled states, currency and notes. Totals and unique numbers are server-calculated; invoice allowances are concurrency-safe and snapshot company/logo/template details for history.
+- **Plans and renewals:** Customers choose an available plan with immediate activation; Admin may assign plans and override limits. Active-term plan changes carry issued-invoice usage forward; a new term after expiry resets it. Drafts do not consume allowance; cancelling an issued invoice does not restore its slot.
+- **Company identity and custom designs:** each Customer account is its own invoice identity, with a profile/logo saved as a snapshot on each invoice. Customers can create custom invoice templates within plan limits; reducing a limit does not disable existing templates.
 - **Product catalogue:** products/services and product categories are owned by one customer account. SKUs are unique within an account; categories may have the same name across accounts.
 - **Data isolation:** all customer-owned rows carry a tenant/customer id, including invoice line items (whose tenant must match their parent invoice). Customer repository queries are scoped to the session account, foreign IDs return `404`, and customer create/update/delete operations validate ownership in the backend. Admin access to customer data is read-only.
-- **Admin dashboard:** customer-wise invoice totals/counts, active products, categories, account details and purchased plans.
+- **Admin dashboard and reports:** authorized customer-wise statistics plus monthly invoice reports for the current calendar month and previous nine months, including term allowance usage and currency-grouped financial totals.
+- **Exports and audit:** scoped product, invoice and audit XLSX exports protect untrusted text against spreadsheet formulas. Audit access/exports are logged; audit rows are append-only and exclude passwords, auth secrets and payment credentials.
+- **Expiry reminders:** in-app reminders are generated seven, three and one day before subscription expiry and when a plan expires; customers retain read access to historical invoices and must renew to create new billing data.
 - **Caching:** Redis caches active plans and dashboard metrics (180-second default TTL); administrative and customer writes evict affected entries.
 - **Sessions:** Spring Session stores web sessions in Redis so either application instance can serve a signed-in user.
 - **API:** versioned JSON endpoints under `/api/v1`, protected by HTTP Basic for Admin and Customer accounts with the same tenant checks as the web UI; see [API reference](docs/api-reference.md).

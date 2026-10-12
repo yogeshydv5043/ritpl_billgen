@@ -32,4 +32,8 @@ public interface CatalogProductRepository extends JpaRepository<CatalogProduct, 
     long countByCustomer_IdAndActiveTrue(Long customerId);
 
     long countByCategory_Id(Long categoryId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update CatalogProduct p set p.category = null where p.category.id = :categoryId and p.customer.id = :customerId")
+    int clearCategory(@Param("categoryId") Long categoryId, @Param("customerId") Long customerId);
 }

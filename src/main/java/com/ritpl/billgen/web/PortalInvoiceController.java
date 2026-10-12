@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import com.ritpl.billgen.entity.CustomInvoiceTemplate;
 import com.ritpl.billgen.entity.InvoiceStatus;
 import com.ritpl.billgen.security.AppUserPrincipal;
 import com.ritpl.billgen.security.TenantScope;
@@ -42,7 +43,12 @@ public class PortalInvoiceController {
     public String list(@AuthenticationPrincipal AppUserPrincipal principal, Model model) {
         TenantScope scope = TenantScope.from(principal);
         model.addAttribute("invoices", invoices.findAll(scope));
-        model.addAttribute("templates", subscriptions.accessibleTemplates(scope));
+        var templates = subscriptions.accessibleTemplates(scope);
+        boolean activePlan = subscriptions.findActiveSubscription(scope, scope.requireCustomerId()).isPresent();
+        var customTemplateList = activePlan ? customTemplates.findActive(scope) : List.<com.ritpl.billgen.entity.CustomInvoiceTemplate>of();
+        model.addAttribute("templates", templates);
+        model.addAttribute("customTemplates", customTemplateList);
+        model.addAttribute("hasTemplates", activePlan && (!templates.isEmpty() || !customTemplateList.isEmpty()));
         return "portal/invoices";
     }
 
@@ -113,12 +119,13 @@ public class PortalInvoiceController {
 
     private void prepareForm(TenantScope scope, Model model) {
         var templates = subscriptions.accessibleTemplates(scope);
-        var customTemplateList = customTemplates.findActive(scope);
+        boolean activePlan = subscriptions.findActiveSubscription(scope, scope.requireCustomerId()).isPresent();
+        var customTemplateList = activePlan ? customTemplates.findActive(scope) : List.<com.ritpl.billgen.entity.CustomInvoiceTemplate>of();
         model.addAttribute("templates", templates);
         model.addAttribute("customTemplates", customTemplateList);
         model.addAttribute("products", catalog.findActive(scope));
         model.addAttribute("statuses", selectableStatuses());
-        model.addAttribute("hasTemplates", !templates.isEmpty() || !customTemplateList.isEmpty());
+        model.addAttribute("hasTemplates", activePlan && (!templates.isEmpty() || !customTemplateList.isEmpty()));
     }
 
     /** Statuses a customer may create a new invoice with. */

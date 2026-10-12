@@ -144,16 +144,16 @@ public class DemoDataInitializer implements CommandLineRunner {
     private void seedPlans() {
         List<PlanCommand> examples = List.of(
                 new PlanCommand("STARTER", "Starter", "For your first 50 invoices", "Simple invoicing for solo businesses.",
-                        new BigDecimal("0.00"), new BigDecimal("0.00"), "INR", 25, 50,
-                        "Unlimited drafts\nClassic and minimal templates\nYour own product catalogue", false, 10,
+                        new BigDecimal("0.00"), new BigDecimal("0.00"), "INR", 25, 50, 25, 1,
+                        "Unlimited drafts\nClassic and minimal templates\nYour own product catalogue", false, true, 10,
                         templateIds("CLASSIC", "MINIMAL")),
                 new PlanCommand("GROWTH", "Growth", "Room to build momentum", "More customers and smarter workflows for growing teams.",
-                        new BigDecimal("799.00"), new BigDecimal("7990.00"), "INR", 500, 1000,
-                        "Everything in Starter\nEvery bill template\nProduct and category management\nPriority support\nCSV exports", true, 20,
+                        new BigDecimal("799.00"), new BigDecimal("7990.00"), "INR", 500, 1000, 500, 5,
+                        "Everything in Starter\nEvery bill template\nProduct and category management\nPriority support\nExcel exports", true, true, 20,
                         templateIds("CLASSIC", "MODERN", "MINIMAL")),
                 new PlanCommand("SCALE", "Scale", "Billing at full speed", "A richer control plane for finance teams and established businesses.",
-                        new BigDecimal("2499.00"), new BigDecimal("24990.00"), "INR", 5000, 10000,
-                        "Everything in Growth\nCustom invoice branding\nAdvanced reporting\nDedicated onboarding", false, 30,
+                        new BigDecimal("2499.00"), new BigDecimal("24990.00"), "INR", 5000, 10000, 5000, 20,
+                        "Everything in Growth\nCustom invoice templates\nAdvanced reporting\nDedicated onboarding", false, true, 30,
                         templateIds("CLASSIC", "MODERN", "MINIMAL"))
         );
         for (PlanCommand plan : examples) {
@@ -204,11 +204,12 @@ public class DemoDataInitializer implements CommandLineRunner {
                 List.of(new InvoiceLineInput("Product design workshop", BigDecimal.ONE, new BigDecimal("48000.00"), new BigDecimal("18.00")),
                         new InvoiceLineInput("Research and discovery", new BigDecimal("8"), new BigDecimal("3500.00"), new BigDecimal("18.00"))),
                 InvoiceStatus.SENT));
-        invoiceService.create(scope, new CreateInvoiceCommand(customer.getId(),
+        var paidInvoice = invoiceService.create(scope, new CreateInvoiceCommand(customer.getId(),
                 LocalDate.now().minusDays(3), LocalDate.now().plusDays(11),
                 "Payment received. We appreciate your business.", "INR", templateCodeOf(templateCode),
                 List.of(new InvoiceLineInput("Brand identity package", BigDecimal.ONE, new BigDecimal("32000.00"), new BigDecimal("18.00"))),
-                InvoiceStatus.PAID));
+                InvoiceStatus.SENT));
+        invoiceService.markPaid(scope, paidInvoice.getId());
     }
 
     private Long templateCodeOf(String code) { return templateRepo.findByCodeIgnoreCase(code).map(BillTemplate::getId).orElse(null); }

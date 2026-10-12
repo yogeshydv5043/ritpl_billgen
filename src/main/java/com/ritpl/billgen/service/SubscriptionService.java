@@ -128,6 +128,8 @@ public class SubscriptionService {
         Long previousPlanId = current == null ? null : current.getPlan().getId();
         int carry = 0;
         if (current != null) {
+            // A plan change within an unexpired term is not a quota reset: issued usage follows the customer to the new plan.
+            // Once the term has expired, start the new term with a clean allowance.
             if (current.isEffective(today)) {
                 long used = current.getInvoiceUsageCarryForward() + invoices.countByUsageSubscription_IdAndUsageCountedTrue(current.getId());
                 carry = Math.toIntExact(Math.min(used, Integer.MAX_VALUE));

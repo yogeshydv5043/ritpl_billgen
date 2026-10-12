@@ -32,6 +32,8 @@ Creates an invoice for the authenticated Customer account. Admin credentials can
   "notes": "Thank you for your business.",
   "currency": "INR",
   "templateId": 1,
+  "customTemplateId": null,
+  "discountAmount": 250.00,
   "initialStatus": "SENT",
   "lines": [
     {
@@ -44,13 +46,13 @@ Creates an invoice for the authenticated Customer account. Admin credentials can
 }
 ```
 
-`initialStatus` must be `DRAFT` or `SENT`. `currency` is a 3-letter code (defaults to INR when omitted). `templateId` must be included in the Customer's active plan. Each invoice must have 1–30 lines. Quantity must be positive with up to three fractional digits; price and tax rate allow two. Tax rate is 0–100%.
+`initialStatus` must be `DRAFT` or `SENT`. `currency` is a 3-letter code (defaults to INR when omitted). Provide exactly one of `templateId` (an active standard template in the Customer's plan) or `customTemplateId` (an active template owned by the Customer). `discountAmount` is optional and defaults to zero; it must be non-negative, have at most two decimal places, and not exceed subtotal plus tax. Each invoice must have 1–30 lines. Quantity must be positive with up to three fractional digits; price and tax rate allow two. Tax rate is 0–100%.
 
-The application calculates subtotal, tax and total server-side; submitted totals are not accepted.
+The application calculates subtotal, tax, discount and total server-side; submitted totals are not accepted. Drafts do not consume invoice allowance. Creating an invoice as `SENT` consumes one slot; issuing a draft does too. Cancelling an issued invoice does not restore its slot.
 
 ### `PATCH /invoices/{id}/status`
 
-Moves an owned invoice from `DRAFT` to `SENT` or `SENT` to `PAID`.
+Moves an owned invoice from `DRAFT` to `SENT`, `SENT` to `PAID`, or `DRAFT`/`SENT` to `CANCELLED`. Cancellation never restores usage for an issued invoice.
 
 ```json
 { "status": "PAID" }
@@ -128,6 +130,30 @@ Activates an available plan. A Customer may only activate a plan on its own acco
 ### `DELETE /customers/{id}/subscription`
 
 Cancels the active subscription. Template access is withdrawn immediately. Customer can cancel only its own subscription; Admin may manage any account.
+
+### Term, usage and access policy
+
+Customers can choose any available plan and activation is immediate; no payment gateway or checkout is required. A renewal or plan change before the current term expires carries issued-invoice usage forward into the new term. A new term after expiry resets usage. DRAFT invoices do not consume allowance; creating/issuing SENT consumes one slot; cancelling an issued invoice does not restore it. Existing custom templates remain usable if a limit is reduced below current use; only additional template creation is blocked until usage falls below the limit. When a subscription expires or is cancelled, customers can still read their historical invoices but cannot create or issue new invoices until a plan is active again. In-app notices are generated seven, three and one day before expiry and after expiry.
+
+## Company profile and custom templates
+
+### `GET /company-profile` and `PUT /company-profile`
+
+Read or update the authenticated Customer's invoice company identity. The API accepts company/contact, email, address, country and GSTIN fields; logo upload/clear is available in the portal. Each invoice stores a company/logo snapshot, so later profile changes affect new invoices only.
+
+### `GET /custom-templates`, `POST /custom-templates`, `PUT /custom-templates/{id}`, `DELETE /custom-templates/{id}`
+
+Customers may list and manage only their own custom invoice templates. Create/update fields are `name`, `styleKey` (`CLASSIC`, `MODERN` or `MINIMAL`), optional hex `accentColor`, and `active`. Creation is limited by the active plan; a used template is archived rather than removed so historical invoices remain stable. Admin has read-only access to customer-owned templates.
+
+## Expiry notifications
+
+### `GET /notifications`
+
+Returns the signed-in Customer's recent in-app subscription notifications.
+
+### `POST /notifications/{id}/read`
+
+Marks one of the Customer's own notifications as read; other tenants' notification IDs return `404`.
 
 ## Customer accounts and statistics
 
