@@ -62,12 +62,18 @@ jobs:
         run: |
           echo "### Test results" >> "$GITHUB_STEP_SUMMARY"
           echo >> "$GITHUB_STEP_SUMMARY"
+          totals="0 0 0 0"
           if [ -d target/surefire-reports ]; then
             grep -h "Tests run" target/surefire-reports/*.txt >> "$GITHUB_STEP_SUMMARY" \
               || echo "No Surefire summary files were produced." >> "$GITHUB_STEP_SUMMARY"
+            totals=$(grep -hoE "Tests run: [0-9]+, Failures: [0-9]+, Errors: [0-9]+, Skipped: [0-9]+" target/surefire-reports/*.txt \
+              | sed -E 's/[^0-9]+/ /g' \
+              | awk '{ t+=$1; f+=$2; e+=$3; s+=$4 } END { printf "%d %d %d %d", t, f, e, s }')
           else
             echo "No test reports were produced." >> "$GITHUB_STEP_SUMMARY"
           fi
+          set -- $totals
+          echo "::notice title=Automated tests::Tests run: $1, Failures: $2, Errors: $3, Skipped: $4"
 
       - name: Upload test report
         if: always()
