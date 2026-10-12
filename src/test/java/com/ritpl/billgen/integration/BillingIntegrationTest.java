@@ -209,21 +209,22 @@ class BillingIntegrationTest {
     void auditRecordsFollowTenantScopeAndNeverLeakAcrossAccounts() {
         Tenant first = newTenant("audit-a", 10);
         Tenant second = newTenant("audit-b", 10);
+        Long firstCustomerId = first.customerId();
         Invoice visible = invoiceService.create(first.scope(), sentInvoice(first));
-        first = Tenant.from(first, visible.getId());
 
         Page<AuditRecord> ownAudit = auditService.search(first.scope(),
                 new AuditFilter(null, null, "CREATE", "INVOICE", null, null, null), PageRequest.of(0, 20));
         assertTrue(ownAudit.getTotalElements() >= 1, "the tenant sees its own invoice generation event");
-        ownAudit.forEach(record -> assertEquals(first.customerId(),
-                record.getCustomer() == null ? first.customerId() : record.getCustomer().getId()));
+        ownAudit.forEach(record -> assertEquals(firstCustomerId,
+                record.getCustomer() == null ? firstCustomerId : record.getCustomer().getId(),
+                "every row the tenant can read belongs to that tenant"));
 
         Page<AuditRecord> otherAudit = auditService.search(second.scope(),
                 new AuditFilter(null, null, "CREATE", "INVOICE", null, null, null), PageRequest.of(0, 20));
         assertEquals(0, otherAudit.getTotalElements(), "another tenant's activity is not visible or exportable");
 
-        // Cross-tenant reads are refused for both invoice rows and their PDF/print source.
-        Long foreignInvoice = first.invoiceId();
+        // Cross-tenant reads are refused, including the row behind a PDF or print download.
+        Long foreignInvoice = visible.getId();
         assertThrows(ResourceNotFoundException.class, () -> invoiceService.findById(second.scope(), foreignInvoice));
     }
 
@@ -247,15 +248,10 @@ class BillingIntegrationTest {
                 "9999999999", "India", "Integration!2026"));
         CustomerSubscription subscription = subscriptionService.activate(TenantScope.administrator(), customer.getId(),
                 plan.getId(), "it-admin");
-        return new Tenant(customer.getId(), subscription.getId(), template.getId(), suffix, email, null);
+        return new Tenant(customer.getId(), subscription.getId(), template.getId(), suffix, email);
     }
 
-    private record Tenant(Long customerId, Long subscriptionId, Long templateId, String suffix, String email,
-            Long invoiceId) {
+    private record Tenant(Long customerId, Long subscriptionId, Long templateId, String suffix, String email) {
         TenantScope scope() { return TenantScope.ofCustomer(customerId); }
-        static Tenant from(Tenant base, Long invoiceId) {
-            return new Tenant(base.customerId(), base.subscriptionId(), base.templateId(), base.suffix(),
-                    base.email(), invoiceId);
-        }
     }
 }
