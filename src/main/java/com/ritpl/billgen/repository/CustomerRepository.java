@@ -14,9 +14,9 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     List<Customer> findBySystemAccountFalseOrderByCompanyNameAsc();
 
     @Query("select c from Customer c where c.systemAccount = false and "
-            + "(lower(c.companyName) like lower(concat('%', concat(:term, '%'))) "
-            + "or lower(c.contactName) like lower(concat('%', concat(:term, '%'))) "
-            + "or lower(c.email) like lower(concat('%', concat(:term, '%')))) order by c.companyName asc")
+            + "(lower(c.companyName) like lower(concat('%', cast(:term as string), '%')) "
+            + "or lower(c.contactName) like lower(concat('%', cast(:term as string), '%')) "
+            + "or lower(c.email) like lower(concat('%', cast(:term as string), '%'))) order by c.companyName asc")
     List<Customer> searchVisible(@Param("term") String term);
 
     long countBySystemAccountFalse();

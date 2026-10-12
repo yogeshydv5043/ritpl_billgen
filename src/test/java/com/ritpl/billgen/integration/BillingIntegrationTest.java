@@ -37,7 +37,6 @@ import com.ritpl.billgen.entity.InvoiceStatus;
 import com.ritpl.billgen.entity.ProductType;
 import com.ritpl.billgen.entity.SubscriptionPlan;
 import com.ritpl.billgen.entity.AuditRecord;
-import com.ritpl.billgen.repository.CustomerSubscriptionRepository;
 import com.ritpl.billgen.repository.InvoiceRepository;
 import com.ritpl.billgen.security.TenantScope;
 import com.ritpl.billgen.service.AuditFilter;
@@ -97,7 +96,6 @@ class BillingIntegrationTest {
     @Autowired InvoiceService invoiceService;
     @Autowired AuditService auditService;
     @Autowired InvoiceRepository invoices;
-    @Autowired CustomerSubscriptionRepository subscriptionRepository;
     @Autowired JdbcTemplate jdbc;
     @Autowired com.ritpl.billgen.service.SubscriptionExpiryNotificationService notificationService;
 
@@ -193,10 +191,10 @@ class BillingIntegrationTest {
         Invoice issued = invoiceService.create(tenant.scope(), sentInvoice(tenant));
         Long invoiceId = issued.getId();
 
-        // Expire the term the way the calendar does, then run the scheduled expiry pass.
-        CustomerSubscription subscription = subscriptionRepository.findById(tenant.subscriptionId()).orElseThrow();
-        subscription.setEndsOn(LocalDate.now().minusDays(1));
-        subscriptionRepository.saveAndFlush(subscription);
+        // Expire the term the way the calendar does. Both dates move so the schema's
+        // "ends_on >= started_on" rule keeps holding for the historical record.
+        jdbc.update("update customer_subscriptions set started_on = ?, ends_on = ? where id = ?",
+                LocalDate.now().minusDays(30), LocalDate.now().minusDays(1), tenant.subscriptionId());
         assertEquals(1, subscriptionService.markExpired());
 
         assertThrows(IllegalArgumentException.class, () -> invoiceService.create(tenant.scope(), sentInvoice(tenant)));

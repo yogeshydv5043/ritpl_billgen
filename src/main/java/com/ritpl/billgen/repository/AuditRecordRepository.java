@@ -15,7 +15,7 @@ public interface AuditRecordRepository extends JpaRepository<AuditRecord, Long> 
 
     @EntityGraph(attributePaths = "customer")
     @Query("select a from AuditRecord a where (:customerId is null or a.customer.id = :customerId) "
-            + "and (:actor is null or lower(a.actor) like lower(concat('%', concat(:actor, '%')))) "
+            + "and (:actor is null or lower(a.actor) like lower(concat('%', cast(:actor as string), '%'))) "
             + "and (:action is null or a.action = :action) "
             + "and (:resourceType is null or a.resourceType = :resourceType) "
             + "and (:outcome is null or a.outcome = :outcome) "
