@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Company profile')}"></head>
+<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content page-content-narrow">
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <div class="breadcrumb"><a th:href="@{/portal}">Workspace</a><span>/</span><span>Company profile</span></div>
+    <section class="page-title-row compact-title"><div><span class="kicker">INVOICE IDENTITY</span><h1>Company profile</h1><p class="page-lede">These details and your logo are saved on each new invoice as a historical snapshot.</p></div></section>
+    <form class="panel form-panel" th:action="@{/portal/company}" th:object="${companyProfileForm}" method="post" enctype="multipart/form-data" novalidate>
+        <div class="global-errors" th:if="${#fields.hasGlobalErrors()}"><p th:each="err : ${#fields.globalErrors()}" th:text="${err}">Please check the profile.</p></div>
+        <div class="form-grid"><div class="field"><label for="companyName">Company name</label><input id="companyName" th:field="*{companyName}" required><small class="field-error" th:if="${#fields.hasErrors('companyName')}" th:errors="*{companyName}"></small></div>
+            <div class="field"><label for="contactName">Contact name</label><input id="contactName" th:field="*{contactName}" required><small class="field-error" th:if="${#fields.hasErrors('contactName')}" th:errors="*{contactName}"></small></div>
+            <div class="field"><label for="email">Company email</label><input id="email" type="email" th:field="*{email}" required><small class="field-help">This does not change your sign-in email.</small><small class="field-error" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></small></div>
+            <div class="field"><label for="phone">Phone</label><input id="phone" th:field="*{phone}"></div>
+            <div class="field field-full"><label for="billingAddress">Street address</label><input id="billingAddress" th:field="*{billingAddress}"></div>
+            <div class="field"><label for="city">City</label><input id="city" th:field="*{city}"></div><div class="field"><label for="state">State / region</label><input id="state" th:field="*{state}"></div>
+            <div class="field"><label for="postalCode">Postal code</label><input id="postalCode" th:field="*{postalCode}"></div><div class="field"><label for="country">Country</label><input id="country" th:field="*{country}"></div>
+            <div class="field"><label for="gstin">GSTIN / tax ID</label><input id="gstin" th:field="*{gstin}"></div>
+        </div>
+        <div class="form-divider"></div>
+        <div class="form-grid"><div class="field field-full"><label for="logo">Company logo</label>
+            <img th:if="${customer.logoDataUrl != null}" th:src="${customer.logoDataUrl}" alt="Current company logo" style="max-width:180px;max-height:90px;display:block;margin:0 0 12px">
+            <input id="logo" type="file" th:field="*{logo}" accept="image/png,image/jpeg,image/webp">
+            <small class="field-help">PNG, JPEG or WebP, up to 1 MB. SVG and other active formats are not accepted.</small>
+            <small class="field-error" th:if="${#fields.hasErrors('logo')}" th:errors="*{logo}"></small>
+            <label class="check-field" th:if="${customer.logoDataUrl != null}"><input type="checkbox" th:field="*{clearLogo}"><span class="custom-check"></span><span><strong>Remove current logo</strong></span></label>
+        </div></div>
+        <div class="form-actions"><a class="button button-quiet" th:href="@{/portal}">Cancel</a><button class="button button-primary" type="submit">Save profile <span>→</span></button></div>
+    </form>
+</div></main></div></body></html>

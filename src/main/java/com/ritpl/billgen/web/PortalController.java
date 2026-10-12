@@ -13,6 +13,7 @@ import com.ritpl.billgen.service.CustomerService;
 import com.ritpl.billgen.service.InvoiceService;
 import com.ritpl.billgen.service.ProductCategoryService;
 import com.ritpl.billgen.service.SubscriptionService;
+import com.ritpl.billgen.service.SubscriptionExpiryNotificationService;
 
 /**
  * Home of the customer portal. Every query on this screen is pinned to the signed-in account, so
@@ -27,11 +28,13 @@ public class PortalController {
     private final CatalogService catalog;
     private final ProductCategoryService categories;
     private final SubscriptionService subscriptions;
+    private final SubscriptionExpiryNotificationService expiryNotifications;
 
     public PortalController(CustomerService customers, AccountStatsService accountStats, InvoiceService invoices,
-            CatalogService catalog, ProductCategoryService categories, SubscriptionService subscriptions) {
+            CatalogService catalog, ProductCategoryService categories, SubscriptionService subscriptions,
+            SubscriptionExpiryNotificationService expiryNotifications) {
         this.customers = customers; this.accountStats = accountStats; this.invoices = invoices;
-        this.catalog = catalog; this.categories = categories; this.subscriptions = subscriptions;
+        this.catalog = catalog; this.categories = categories; this.subscriptions = subscriptions; this.expiryNotifications = expiryNotifications;
     }
 
     @GetMapping
@@ -41,6 +44,8 @@ public class PortalController {
         model.addAttribute("customer", customers.findById(scope, customerId));
         model.addAttribute("stats", accountStats.findOne(scope, customerId));
         model.addAttribute("subscription", subscriptions.findActiveSubscription(scope, customerId).orElse(null));
+        model.addAttribute("quota", subscriptions.usage(scope, customerId));
+        model.addAttribute("notifications", expiryNotifications.findForCustomer(scope));
         model.addAttribute("templates", subscriptions.accessibleTemplates(scope));
         model.addAttribute("invoices", invoices.findForCustomer(scope, customerId));
         model.addAttribute("products", catalog.findActive(scope));

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(${formTitle})}"></head>
+<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content page-content-narrow">
+    <div class="breadcrumb"><a th:href="@{/portal/templates}">Custom templates</a><span>/</span><span th:text="${formTitle}">Template</span></div>
+    <section class="page-title-row compact-title"><div><span class="kicker">TENANT TEMPLATE</span><h1 th:text="${formTitle}">Create template</h1><p class="page-lede">Choose a supported layout and an optional accent color.</p></div></section>
+    <form class="panel form-panel" th:action="@{${formAction}}" th:object="${templateForm}" method="post" novalidate>
+        <div class="global-errors" th:if="${#fields.hasGlobalErrors()}"><p th:each="err : ${#fields.globalErrors()}" th:text="${err}">Please check the template.</p></div>
+        <div class="form-grid"><div class="field field-full"><label for="name">Template name</label><input id="name" th:field="*{name}" maxlength="100" required><small class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></small></div>
+            <div class="field"><label for="styleKey">Layout</label><select id="styleKey" th:field="*{styleKey}"><option th:each="style : ${styles}" th:value="${style.name()}" th:text="${style.displayName}">Classic</option></select><small class="field-error" th:if="${#fields.hasErrors('styleKey')}" th:errors="*{styleKey}"></small></div>
+            <div class="field"><label for="accentColor">Accent color</label><input id="accentColor" th:field="*{accentColor}" placeholder="#2563EB" pattern="^#[0-9a-fA-F]{6}$"><small class="field-help">Optional six-digit hex color.</small><small class="field-error" th:if="${#fields.hasErrors('accentColor')}" th:errors="*{accentColor}"></small></div>
+            <div class="field"><label class="check-field"><input type="checkbox" th:field="*{active}"><span class="custom-check"></span><span><strong>Available for new invoices</strong><small>Used invoices keep their historical template snapshot.</small></span></label></div>
+        </div>
+        <div class="form-actions"><a class="button button-quiet" th:href="@{/portal/templates}">Cancel</a><button class="button button-primary" type="submit">Save template <span>→</span></button></div>
+    </form>
+</div></main></div></body></html>

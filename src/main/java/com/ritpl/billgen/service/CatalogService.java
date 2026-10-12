@@ -3,6 +3,7 @@ package com.ritpl.billgen.service;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,9 +28,13 @@ public class CatalogService {
     private final CatalogProductRepository products;
     private final ProductCategoryRepository categories;
     private final CustomerRepository customers;
+    private final SubscriptionService subscriptions;
+    private final AuditService audit;
 
-    public CatalogService(CatalogProductRepository products, ProductCategoryRepository categories, CustomerRepository customers) {
+    public CatalogService(CatalogProductRepository products, ProductCategoryRepository categories, CustomerRepository customers,
+            SubscriptionService subscriptions, AuditService audit) {
         this.products = products; this.categories = categories; this.customers = customers;
+        this.subscriptions = subscriptions; this.audit = audit;
     }
 
     /** Catalogue of the caller's account, or the whole estate for an administrator. */
@@ -77,10 +82,17 @@ public class CatalogService {
                 ? products.existsBySkuIgnoreCaseAndCustomer_Id(sku, ownerId)
                 : products.existsBySkuIgnoreCaseAndCustomer_IdAndIdNot(sku, ownerId, id);
         if (duplicate) throw new IllegalArgumentException("That SKU is already used in your catalogue.");
+        if (id == null) {
+            var activeSubscription = subscriptions.requireActiveForUpdate(scope);
+            if (products.countByCustomer_Id(ownerId) >= activeSubscription.getEffectiveProductLimit()) {
+                throw new IllegalArgumentException("Your plan's active product limit has been reached.");
+            }
+        }
 
         CatalogProduct product = id == null
                 ? new CatalogProduct(owner, sku, command.name().trim(), command.productType(), command.unitPrice(), command.taxRate())
                 : findById(scope, id);
+        Map<String, Object> before = id == null ? null : Map.of("sku", product.getSku(), "name", product.getName(), "active", product.isActive());
         product.setCustomer(owner);
         product.setSku(sku);
         product.setName(command.name().trim());
@@ -90,7 +102,11 @@ public class CatalogService {
         product.setUnitPrice(command.unitPrice().setScale(2));
         product.setTaxRate(command.taxRate().setScale(2));
         product.setActive(command.active());
-        return products.save(product);
+        CatalogProduct saved = products.save(product);
+        audit.record(AuditEventCommand.success(ownerId, id == null ? "CREATE" : "UPDATE", "PRODUCT", "Product", saved.getId(),
+                id == null ? "Customer created a catalogue product." : "Customer updated a catalogue product.", before,
+                Map.of("sku", saved.getSku(), "name", saved.getName(), "unitPrice", saved.getUnitPrice(), "taxRate", saved.getTaxRate(), "active", saved.isActive())));
+        return saved;
     }
 
     @Transactional
@@ -98,7 +114,10 @@ public class CatalogService {
     public void setActive(TenantScope scope, long id, boolean active) {
         CatalogProduct product = findById(scope, id);
         scope.requireWriteAccess();
+        boolean wasActive = product.isActive();
         product.setActive(active);
+        audit.record(AuditEventCommand.success(product.getCustomerId(), "UPDATE", "PRODUCT", "Product", id,
+                "Customer changed product availability.", Map.of("active", wasActive), Map.of("active", active)));
     }
 
     @Transactional
@@ -106,7 +125,10 @@ public class CatalogService {
     public void delete(TenantScope scope, long id) {
         CatalogProduct product = findById(scope, id);
         scope.requireWriteAccess();
+        Long ownerId = product.getCustomerId(); String sku = product.getSku(); String name = product.getName();
         products.delete(product);
+        audit.record(AuditEventCommand.success(ownerId, "DELETE", "PRODUCT", "Product", id,
+                "Customer deleted a catalogue product.", Map.of("sku", sku, "name", name), null));
     }
 
     /** A category can only be linked when it belongs to the same account as the item. */

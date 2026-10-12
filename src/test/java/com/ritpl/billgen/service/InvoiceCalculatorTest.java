@@ -31,6 +31,25 @@ class InvoiceCalculatorTest {
     }
 
     @Test
+    void appliesFlatDiscountAfterLineTaxes() {
+        InvoiceTotals totals = calculator.calculate(List.of(
+                new InvoiceLineInput("Taxed item", BigDecimal.ONE, new BigDecimal("100.00"), new BigDecimal("18.00"))),
+                new BigDecimal("10.00"));
+        assertEquals(new BigDecimal("100.00"), totals.subtotal());
+        assertEquals(new BigDecimal("18.00"), totals.taxAmount());
+        assertEquals(new BigDecimal("10.00"), totals.discountAmount());
+        assertEquals(new BigDecimal("108.00"), totals.totalAmount());
+    }
+
+    @Test
+    void rejectsInvalidFlatDiscount() {
+        var lines = List.of(new InvoiceLineInput("Item", BigDecimal.ONE, new BigDecimal("10.00"), BigDecimal.ZERO));
+        assertThrows(IllegalArgumentException.class, () -> calculator.calculate(lines, new BigDecimal("10.01")));
+        assertThrows(IllegalArgumentException.class, () -> calculator.calculate(lines, new BigDecimal("-0.01")));
+        assertThrows(IllegalArgumentException.class, () -> calculator.calculate(lines, new BigDecimal("0.001")));
+    }
+
+    @Test
     void requiresAtLeastOneLine() {
         assertThrows(IllegalArgumentException.class, () -> calculator.calculate(List.of()));
     }

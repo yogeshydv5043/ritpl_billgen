@@ -1,5 +1,8 @@
 package com.ritpl.billgen.web;
 
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -10,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import com.ritpl.billgen.security.AppUserPrincipal;
 import com.ritpl.billgen.security.TenantScope;
 import com.ritpl.billgen.service.AccountStatsService;
 import com.ritpl.billgen.service.CatalogService;
@@ -110,9 +114,12 @@ public class CustomerController {
 
     /** Assigns a plan to an account; this is what unlocks the plan's bill templates for it. */
     @PostMapping("/{id}/plan")
-    public String assignPlan(@PathVariable long id, @RequestParam long planId, RedirectAttributes redirect) {
+    public String assignPlan(@PathVariable long id, @RequestParam long planId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startedOn,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endsOn,
+            @AuthenticationPrincipal AppUserPrincipal principal, RedirectAttributes redirect) {
         try {
-            var subscription = subscriptions.activate(TenantScope.administrator(), id, planId, "admin");
+            var subscription = subscriptions.activate(TenantScope.administrator(), id, planId, principal.getUsername(), startedOn, endsOn);
             redirect.addFlashAttribute("successMessage",
                     "Plan " + subscription.getPlan().getName() + " is now active for this account.");
         } catch (IllegalArgumentException e) {
@@ -122,9 +129,9 @@ public class CustomerController {
     }
 
     @PostMapping("/{id}/plan/cancel")
-    public String cancelPlan(@PathVariable long id, RedirectAttributes redirect) {
+    public String cancelPlan(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal principal, RedirectAttributes redirect) {
         try {
-            subscriptions.cancel(TenantScope.administrator(), id, "admin");
+            subscriptions.cancel(TenantScope.administrator(), id, principal.getUsername());
             redirect.addFlashAttribute("successMessage", "Plan cancelled. Template access has been withdrawn.");
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("errorMessage", e.getMessage());

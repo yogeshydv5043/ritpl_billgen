@@ -33,6 +33,8 @@ public class SubscriptionPlan implements Serializable {
     @Column(nullable = false, length = 3) private String currency="INR";
     @Column(name = "max_customers", nullable = false) private int maxCustomers;
     @Column(name = "max_monthly_invoices", nullable = false) private int maxMonthlyInvoices;
+    @Column(name = "max_products", nullable = false) private int maxProducts = 100;
+    @Column(name = "max_custom_templates", nullable = false) private int maxCustomTemplates = 3;
     @Column(nullable = false, columnDefinition = "text") private String features;
     @Column(nullable = false) private boolean featured;
     @Column(nullable = false) private boolean active=true;
@@ -57,7 +59,10 @@ public class SubscriptionPlan implements Serializable {
     public String getTagline(){return tagline;} public void setTagline(String v){tagline=v;} public String getDescription(){return description;} public void setDescription(String v){description=v;}
     public BigDecimal getMonthlyPrice(){return monthlyPrice;} public void setMonthlyPrice(BigDecimal v){monthlyPrice=v;} public BigDecimal getAnnualPrice(){return annualPrice;} public void setAnnualPrice(BigDecimal v){annualPrice=v;}
     public String getCurrency(){return currency;} public void setCurrency(String v){currency=v;} public int getMaxCustomers(){return maxCustomers;} public void setMaxCustomers(int v){maxCustomers=v;}
-    public int getMaxMonthlyInvoices(){return maxMonthlyInvoices;} public void setMaxMonthlyInvoices(int v){maxMonthlyInvoices=v;} public String getFeatures(){return features;} public void setFeatures(String v){features=v;}
+    public int getMaxMonthlyInvoices(){return maxMonthlyInvoices;} public void setMaxMonthlyInvoices(int v){maxMonthlyInvoices=v;}
+    public int getMaxProducts(){return maxProducts;} public void setMaxProducts(int v){maxProducts=v;}
+    public int getMaxCustomTemplates(){return maxCustomTemplates;} public void setMaxCustomTemplates(int v){maxCustomTemplates=v;}
+    public String getFeatures(){return features;} public void setFeatures(String v){features=v;}
     public boolean isFeatured(){return featured;} public void setFeatured(boolean v){featured=v;} public boolean isActive(){return active;} public void setActive(boolean v){active=v;}
     public int getSortOrder(){return sortOrder;} public void setSortOrder(int v){sortOrder=v;}
     public Set<BillTemplate> getTemplates(){return templates;} public void setTemplates(Set<BillTemplate> v){templates=v==null?new LinkedHashSet<>():new LinkedHashSet<>(v);}

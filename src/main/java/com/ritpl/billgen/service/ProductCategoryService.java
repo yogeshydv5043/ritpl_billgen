@@ -1,6 +1,7 @@
 package com.ritpl.billgen.service;
 
 import java.util.List;
+import java.util.Map;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,9 +21,11 @@ public class ProductCategoryService {
     private final ProductCategoryRepository categories;
     private final CatalogProductRepository products;
     private final CustomerRepository customers;
+    private final AuditService audit;
 
-    public ProductCategoryService(ProductCategoryRepository categories, CatalogProductRepository products, CustomerRepository customers) {
-        this.categories = categories; this.products = products; this.customers = customers;
+    public ProductCategoryService(ProductCategoryRepository categories, CatalogProductRepository products,
+            CustomerRepository customers, AuditService audit) {
+        this.categories = categories; this.products = products; this.customers = customers; this.audit = audit;
     }
 
     @Transactional(readOnly = true)
@@ -65,10 +68,15 @@ public class ProductCategoryService {
                 : categories.existsByCustomer_IdAndNameIgnoreCaseAndIdNot(ownerId, cleanName, id);
         if (duplicate) throw new IllegalArgumentException("You already have a category with that name.");
         ProductCategory category = id == null ? new ProductCategory(owner, cleanName) : findById(scope, id);
+        Map<String, Object> before = id == null ? null : Map.of("name", category.getName());
         category.setCustomer(owner);
         category.setName(cleanName);
         category.setDescription(description == null || description.isBlank() ? null : description.trim());
-        return categories.save(category);
+        ProductCategory saved = categories.save(category);
+        audit.record(AuditEventCommand.success(ownerId, id == null ? "CREATE" : "UPDATE", "CATEGORY", "Product category", saved.getId(),
+                id == null ? "Customer created a product category." : "Customer updated a product category.", before,
+                Map.of("name", saved.getName())));
+        return saved;
     }
 
     @Transactional
@@ -78,6 +86,8 @@ public class ProductCategoryService {
         scope.requireWriteAccess();
         // Products remain in this account's catalogue; deleting the category unassigns them.
         products.clearCategory(category.getId(), scope.requireCustomerId());
-        categories.delete(category);
+        String name = category.getName(); categories.delete(category);
+        audit.record(AuditEventCommand.success(scope.requireCustomerId(), "DELETE", "CATEGORY", "Product category", id,
+                "Customer deleted a product category; products were retained and unassigned.", Map.of("name", name), null));
     }
 }

@@ -27,6 +27,7 @@
         <a th:href="@{/products}"><span class="nav-icon">◇</span><span>All catalogues</span></a>
         <a th:href="@{/admin/templates}"><span class="nav-icon">▧</span><span>Templates</span></a>
         <a th:href="@{/admin/plans}"><span class="nav-icon">✳</span><span>Plans</span></a>
+        <a th:href="@{/admin/audit}"><span class="nav-icon">⌕</span><span>Audit trail</span></a>
     </nav>
     <div class="nav-label" sec:authorize="hasRole('CUSTOMER')">MY ACCOUNT</div>
     <nav class="nav-links" sec:authorize="hasRole('CUSTOMER')">
@@ -35,6 +36,9 @@
         <a th:href="@{/portal/products}"><span class="nav-icon">◇</span><span>My products</span></a>
         <a th:href="@{/portal/categories}"><span class="nav-icon">▤</span><span>Categories</span></a>
         <a th:href="@{/portal/plan}"><span class="nav-icon">✳</span><span>My plan</span></a>
+        <a th:href="@{/portal/templates}"><span class="nav-icon">▧</span><span>Custom templates</span></a>
+        <a th:href="@{/portal/company}"><span class="nav-icon">▣</span><span>Company profile</span></a>
+        <a th:href="@{/portal/audit}"><span class="nav-icon">⌕</span><span>Audit trail</span></a>
     </nav>
     <div class="sidebar-spacer"></div>
     <a class="sidebar-help" th:href="@{/plans}">

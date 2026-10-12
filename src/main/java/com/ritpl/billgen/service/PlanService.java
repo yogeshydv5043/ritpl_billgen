@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -21,9 +22,10 @@ import com.ritpl.billgen.repository.SubscriptionPlanRepository;
 public class PlanService {
     private final SubscriptionPlanRepository plans;
     private final TemplateService templates;
+    private final AuditService audit;
 
-    public PlanService(SubscriptionPlanRepository plans, TemplateService templates) {
-        this.plans = plans; this.templates = templates;
+    public PlanService(SubscriptionPlanRepository plans, TemplateService templates, AuditService audit) {
+        this.plans = plans; this.templates = templates; this.audit = audit;
     }
 
     @Transactional(readOnly = true)
@@ -54,28 +56,46 @@ public class PlanService {
                         command.maxCustomers(), command.maxMonthlyInvoices(), command.features().trim(),
                         command.featured(), command.sortOrder())
                 : findById(id);
+        Map<String, Object> before = id == null ? null : Map.of("name", plan.getName(), "active", plan.isActive(),
+                "maxInvoices", plan.getMaxMonthlyInvoices(), "maxProducts", plan.getMaxProducts());
         plan.setCode(code); plan.setName(command.name().trim());
         plan.setTagline(blankToNull(command.tagline())); plan.setDescription(blankToNull(command.description()));
         plan.setMonthlyPrice(command.monthlyPrice().setScale(2)); plan.setAnnualPrice(command.annualPrice().setScale(2));
         plan.setCurrency(currency);
         plan.setMaxCustomers(command.maxCustomers()); plan.setMaxMonthlyInvoices(command.maxMonthlyInvoices());
+        plan.setMaxProducts(command.maxProducts()); plan.setMaxCustomTemplates(command.maxCustomTemplates());
         plan.setFeatures(command.features().trim());
         plan.setFeatured(command.featured()); plan.setActive(command.active()); plan.setSortOrder(command.sortOrder());
         plan.setTemplates(resolveTemplates(command.templateIds()));
-        return plans.save(plan);
+        SubscriptionPlan saved = plans.save(plan);
+        audit.record(AuditEventCommand.success(null, id == null ? "CREATE" : "UPDATE", "PLAN", "Subscription plan", saved.getId(),
+                id == null ? "Admin created a subscription plan." : "Admin updated a subscription plan.", before,
+                Map.of("name", saved.getName(), "active", saved.isActive(), "maxInvoices", saved.getMaxMonthlyInvoices(),
+                        "maxProducts", saved.getMaxProducts())));
+        return saved;
     }
 
     @Transactional
     @CacheEvict(cacheNames = {"active-plans", "customer-templates", "dashboard"}, allEntries = true)
-    public void setActive(long id, boolean active) { findById(id).setActive(active); }
+    public void setActive(long id, boolean active) {
+        SubscriptionPlan plan = findById(id);
+        boolean before = plan.isActive(); plan.setActive(active);
+        audit.record(AuditEventCommand.success(null, "UPDATE_STATUS", "PLAN", "Subscription plan", id,
+                "Admin changed subscription plan availability.", Map.of("active", before), Map.of("active", active)));
+    }
 
     /** Replaces the templates bundled with a plan without touching the rest of the plan. */
     @Transactional
     @CacheEvict(cacheNames = {"active-plans", "customer-templates", "dashboard"}, allEntries = true)
     public SubscriptionPlan setTemplates(long id, Set<Long> templateIds) {
         SubscriptionPlan plan = findById(id);
+        int beforeCount = plan.getTemplates().size();
         plan.setTemplates(resolveTemplates(templateIds));
-        return plans.save(plan);
+        SubscriptionPlan saved = plans.save(plan);
+        audit.record(AuditEventCommand.success(null, "UPDATE_TEMPLATES", "PLAN", "Subscription plan", id,
+                "Admin changed the templates included in a plan.", Map.of("templateCount", beforeCount),
+                Map.of("templateCount", saved.getTemplates().size())));
+        return saved;
     }
 
     private Set<BillTemplate> resolveTemplates(Set<Long> templateIds) {
@@ -100,7 +120,8 @@ public class PlanService {
                 || c.annualPrice() == null || c.annualPrice().signum() < 0 || c.annualPrice().scale() > 2) {
             throw new IllegalArgumentException("Plan prices must be non-negative with at most 2 decimal places.");
         }
-        if (c.maxCustomers() < 1 || c.maxMonthlyInvoices() < 1) throw new IllegalArgumentException("Plan usage limits must be at least 1.");
+        if (c.maxCustomers() < 1 || c.maxMonthlyInvoices() < 1 || c.maxProducts() < 1 || c.maxCustomTemplates() < 0)
+            throw new IllegalArgumentException("Plan limits must be positive; custom template limits may be zero.");
         if (c.templateIds() != null && c.templateIds().isEmpty()) {
             throw new IllegalArgumentException("Add at least one bill template to the plan.");
         }

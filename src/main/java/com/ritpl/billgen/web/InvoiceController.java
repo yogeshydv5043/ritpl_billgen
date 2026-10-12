@@ -42,6 +42,7 @@ public class InvoiceController {
 
     @GetMapping("/{id}/print")
     public String print(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal principal, Model model) {
+        invoices.recordPrintExport(TenantScope.from(principal), id);
         model.addAttribute("invoice", invoices.findById(TenantScope.from(principal), id));
         model.addAttribute("backUrl", "/invoices/" + id);
         return "invoices/print";

@@ -38,6 +38,10 @@ spring:
       namespace: billgen:sessions
   thymeleaf:
     cache: ${THYMELEAF_CACHE:false}
+  servlet:
+    multipart:
+      max-file-size: 1MB
+      max-request-size: 2MB
 server:
   port: ${SERVER_PORT:8080}
   forward-headers-strategy: framework
@@ -64,3 +68,6 @@ app:
   bootstrap:
     admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
     admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+  subscription:
+    time-zone: ${SUBSCRIPTION_TIME_ZONE:Asia/Kolkata}
+    expiry-reminder-cron: ${SUBSCRIPTION_EXPIRY_REMINDER_CRON:0 0 9 * * *}

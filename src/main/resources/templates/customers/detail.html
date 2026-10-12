@@ -24,7 +24,8 @@
             <form class="stack-form" th:action="@{/customers/{id}/plan(id=${customer.id})}" method="post">
                 <div class="field"><label for="planId">Assign a plan</label><select id="planId" name="planId" th:disabled="${#lists.isEmpty(plans)}">
                     <option th:each="plan : ${plans}" th:value="${plan.id}" th:selected="${plan.id == stats.planId}" th:text="${plan.name + ' · ' + plan.currency + ' ' + #numbers.formatDecimal(plan.monthlyPrice,1,'COMMA',2,'POINT') + '/mo'}">Growth</option>
-                </select><small class="field-help">Assigning a plan immediately unlocks the templates bundled with it.</small></div>
+                </select><small class="field-help">Assignment is immediate. Leave dates blank to use today and a one-month term.</small></div>
+                <div class="form-grid form-grid-three"><div class="field"><label for="startedOn">Starts on</label><input id="startedOn" type="date" name="startedOn"></div><div class="field"><label for="endsOn">Expires on</label><input id="endsOn" type="date" name="endsOn"></div></div>
                 <div class="form-actions"><button class="button button-primary button-small" type="submit" th:disabled="${#lists.isEmpty(plans)}">Assign plan</button></div>
             </form>
             <form th:if="${stats.hasPlan()}" th:action="@{/customers/{id}/plan/cancel(id=${customer.id})}" method="post"><button class="button button-quiet button-small" type="submit">Cancel plan and withdraw templates</button></form>

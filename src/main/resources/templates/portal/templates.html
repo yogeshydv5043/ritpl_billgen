@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('My templates')}"></head>
+<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content">
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <section class="page-title-row"><div><span class="kicker">YOUR INVOICE DESIGNS</span><h1>Custom templates</h1><p class="page-lede">Create reusable invoice styles for your company. Existing templates stay usable if a plan limit is reduced.</p></div><a class="button button-primary" th:href="@{/portal/templates/new}"><span class="button-plus">＋</span> New template</a></section>
+    <section class="panel table-panel" th:if="${!#lists.isEmpty(templates)}"><table class="data-table"><thead><tr><th>Name</th><th>Layout</th><th>Accent</th><th>Status</th><th></th></tr></thead><tbody>
+        <tr th:each="template : ${templates}"><td><strong th:text="${template.name}">My template</strong></td><td th:text="${template.style.displayName}">Classic</td><td><span class="color-dot" th:style="${template.accentColor == null ? 'background:#376fbd' : 'background:' + template.accentColor}"></span><span th:text="${template.accentColor ?: 'Default'}">Default</span></td><td><span class="status-pill" th:classappend="${template.active ? ' status-paid' : ' status-draft'}" th:text="${template.active ? 'ACTIVE' : 'ARCHIVED'}">ACTIVE</span></td><td class="table-actions"><a class="button button-small button-secondary" th:href="@{/portal/templates/{id}/edit(id=${template.id})}">Edit</a><form th:action="@{/portal/templates/{id}/delete(id=${template.id})}" method="post"><button class="button button-small button-quiet" type="submit">Delete</button></form></td></tr>
+    </tbody></table></section>
+    <section class="empty-state" th:if="${#lists.isEmpty(templates)}"><span class="empty-icon">▧</span><h2>No custom templates yet</h2><p>Create one, then choose it when you create an invoice.</p><a class="button button-primary" th:href="@{/portal/templates/new}">Create a template</a></section>
+</div></main></div></body></html>

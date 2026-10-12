@@ -23,10 +23,12 @@ import com.ritpl.billgen.security.TenantScope;
 import com.ritpl.billgen.service.AccountStatsService;
 import com.ritpl.billgen.service.CatalogService;
 import com.ritpl.billgen.service.CustomerService;
+import com.ritpl.billgen.service.CustomTemplateService;
 import com.ritpl.billgen.service.InvoiceService;
 import com.ritpl.billgen.service.PlanService;
 import com.ritpl.billgen.service.ProductCategoryService;
 import com.ritpl.billgen.service.SubscriptionService;
+import com.ritpl.billgen.service.SubscriptionExpiryNotificationService;
 import jakarta.validation.Valid;
 
 /**
@@ -45,15 +47,19 @@ public class InvoiceApiController {
     private final CustomerService customers;
     private final CatalogService catalog;
     private final ProductCategoryService categories;
+    private final CustomTemplateService customTemplates;
     private final PlanService plans;
     private final SubscriptionService subscriptions;
+    private final SubscriptionExpiryNotificationService expiryNotifications;
     private final AccountStatsService accountStats;
 
     public InvoiceApiController(InvoiceService invoices, CustomerService customers, CatalogService catalog,
-            ProductCategoryService categories, PlanService plans,
-            SubscriptionService subscriptions, AccountStatsService accountStats) {
+            ProductCategoryService categories, CustomTemplateService customTemplates, PlanService plans,
+            SubscriptionService subscriptions, SubscriptionExpiryNotificationService expiryNotifications,
+            AccountStatsService accountStats) {
         this.invoices = invoices; this.customers = customers; this.catalog = catalog; this.categories = categories;
-        this.plans = plans; this.subscriptions = subscriptions; this.accountStats = accountStats;
+        this.customTemplates = customTemplates; this.plans = plans; this.subscriptions = subscriptions;
+        this.expiryNotifications = expiryNotifications; this.accountStats = accountStats;
     }
 
     // --- invoices -------------------------------------------------------------------------------------------------
@@ -77,7 +83,8 @@ public class InvoiceApiController {
     @PostMapping("/invoices")
     public ResponseEntity<InvoiceResponse> createInvoice(@AuthenticationPrincipal AppUserPrincipal principal,
             @Valid @RequestBody CreateInvoiceRequest request) {
-        if (request.initialStatus() == InvoiceStatus.PAID) throw new IllegalArgumentException("An API invoice must start as DRAFT or SENT.");
+        if (request.initialStatus() != InvoiceStatus.DRAFT && request.initialStatus() != InvoiceStatus.SENT)
+            throw new IllegalArgumentException("An API invoice must start as DRAFT or SENT.");
         var saved = invoices.create(scope(principal), request.toCommand());
         URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(saved.getId()).toUri();
         return ResponseEntity.created(location).body(InvoiceResponse.from(invoices.findById(scope(principal), saved.getId())));
@@ -92,8 +99,11 @@ public class InvoiceApiController {
             invoices.markSent(scope, id);
         } else if (request.status() == InvoiceStatus.PAID && invoice.getStatus() == InvoiceStatus.SENT) {
             invoices.markPaid(scope, id);
+        } else if (request.status() == InvoiceStatus.CANCELLED
+                && (invoice.getStatus() == InvoiceStatus.DRAFT || invoice.getStatus() == InvoiceStatus.SENT)) {
+            invoices.cancel(scope, id);
         } else if (request.status() != invoice.getStatus()) {
-            throw new IllegalArgumentException("Status can only move from DRAFT to SENT and from SENT to PAID.");
+            throw new IllegalArgumentException("Allowed status changes are DRAFT to SENT, SENT to PAID, or DRAFT/SENT to CANCELLED.");
         }
         return InvoiceResponse.from(invoices.findById(scope, id));
     }
@@ -158,6 +168,30 @@ public class InvoiceApiController {
         return subscriptions.accessibleTemplates(scope(principal)).stream().map(TemplateResponse::from).toList();
     }
 
+    @GetMapping("/custom-templates")
+    public List<CustomTemplateResponse> listCustomTemplates(@AuthenticationPrincipal AppUserPrincipal principal) {
+        return customTemplates.findAll(scope(principal)).stream().map(CustomTemplateResponse::from).toList();
+    }
+
+    @PostMapping("/custom-templates")
+    public ResponseEntity<CustomTemplateResponse> createCustomTemplate(@AuthenticationPrincipal AppUserPrincipal principal,
+            @Valid @RequestBody CustomTemplateRequest request) {
+        var saved = customTemplates.save(scope(principal), null, request.toCommand());
+        return ResponseEntity.status(201).body(CustomTemplateResponse.from(saved));
+    }
+
+    @PutMapping("/custom-templates/{id}")
+    public CustomTemplateResponse updateCustomTemplate(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal principal,
+            @Valid @RequestBody CustomTemplateRequest request) {
+        return CustomTemplateResponse.from(customTemplates.save(scope(principal), id, request.toCommand()));
+    }
+
+    @DeleteMapping("/custom-templates/{id}")
+    public ResponseEntity<Void> deleteCustomTemplate(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal principal) {
+        customTemplates.delete(scope(principal), id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/plans")
     public List<PlanResponse> listPlans() { return plans.findActive().stream().map(PlanResponse::from).toList(); }
 
@@ -170,18 +204,60 @@ public class InvoiceApiController {
                 .orElseThrow(() -> new com.ritpl.billgen.service.ResourceNotFoundException("This account has no active plan."));
     }
 
-    /** A customer may only subscribe its own account; an administrator may manage any account. */
+    @GetMapping("/customers/{id}/subscriptions")
+    public List<SubscriptionRequest.SubscriptionResponse> subscriptionHistory(@PathVariable long id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        return subscriptions.findHistory(scope(principal), id).stream().map(SubscriptionRequest.SubscriptionResponse::from).toList();
+    }
+
+    /** A customer may only subscribe its own account; an administrator may manage any account and dates. */
     @PostMapping("/customers/{id}/subscription")
     public SubscriptionRequest.SubscriptionResponse assignPlan(@PathVariable long id,
             @AuthenticationPrincipal AppUserPrincipal principal, @Valid @RequestBody SubscriptionRequest request) {
-        var subscription = subscriptions.activate(scope(principal), id, request.planId(), principal.getUsername());
+        TenantScope tenant = scope(principal);
+        if (!tenant.isAdminScope() && (request.startedOn() != null || request.endsOn() != null))
+            throw new AccessDeniedException("Only an administrator may choose subscription dates.");
+        var subscription = subscriptions.activate(tenant, id, request.planId(), principal.getUsername(), request.startedOn(), request.endsOn());
         return SubscriptionRequest.SubscriptionResponse.from(subscription);
+    }
+
+    @PatchMapping("/subscriptions/{subscriptionId}/limits")
+    public SubscriptionRequest.SubscriptionResponse overrideSubscriptionLimits(@PathVariable long subscriptionId,
+            @AuthenticationPrincipal AppUserPrincipal principal, @Valid @RequestBody SubscriptionLimitOverrideRequest request) {
+        if (!scope(principal).isAdminScope()) throw new AccessDeniedException("Administrator access is required.");
+        return SubscriptionRequest.SubscriptionResponse.from(subscriptions.updateLimits(scope(principal), subscriptionId,
+                request.invoiceLimit(), request.productLimit(), request.customTemplateLimit(), principal.getUsername()));
     }
 
     @DeleteMapping("/customers/{id}/subscription")
     public ResponseEntity<Void> cancelPlan(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal principal) {
         subscriptions.cancel(scope(principal), id, principal.getUsername());
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/notifications")
+    public List<SubscriptionNotificationResponse> notifications(@AuthenticationPrincipal AppUserPrincipal principal) {
+        return expiryNotifications.findForCustomer(scope(principal)).stream().map(SubscriptionNotificationResponse::from).toList();
+    }
+
+    @PostMapping("/notifications/{id}/read")
+    public ResponseEntity<Void> markNotificationRead(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal principal) {
+        expiryNotifications.markRead(scope(principal), id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // --- customer company profile -------------------------------------------------------------------------------
+
+    @GetMapping("/company-profile")
+    public CompanyProfileResponse companyProfile(@AuthenticationPrincipal AppUserPrincipal principal) {
+        TenantScope tenant = scope(principal);
+        return CompanyProfileResponse.from(customers.findById(tenant, tenant.requireCustomerId()));
+    }
+
+    @PutMapping("/company-profile")
+    public CompanyProfileResponse updateCompanyProfile(@AuthenticationPrincipal AppUserPrincipal principal,
+            @Valid @RequestBody CompanyProfileRequest request) {
+        return CompanyProfileResponse.from(customers.updateCompanyProfile(scope(principal), request.toCommand()));
     }
 
     // --- customer accounts ----------------------------------------------------------------------------------------

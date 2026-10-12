@@ -14,10 +14,12 @@ public class InvoiceLineForm {
     @NotNull @DecimalMin(value = "0.001") @Digits(integer = 9, fraction = 3) private BigDecimal quantity = BigDecimal.ONE;
     @NotNull @DecimalMin(value = "0.00") @Digits(integer = 12, fraction = 2) private BigDecimal unitPrice = BigDecimal.ZERO;
     @NotNull @DecimalMin(value = "0.00") @DecimalMax(value = "100.00") @Digits(integer = 3, fraction = 2) private BigDecimal taxRate = new BigDecimal("18.00");
+    private Long productId;
 
-    public InvoiceLineInput toInput() { return new InvoiceLineInput(description, quantity, unitPrice, taxRate); }
+    public InvoiceLineInput toInput() { return new InvoiceLineInput(description, quantity, unitPrice, taxRate, productId); }
     public String getDescription(){return description;} public void setDescription(String v){description=v;}
     public BigDecimal getQuantity(){return quantity;} public void setQuantity(BigDecimal v){quantity=v;}
     public BigDecimal getUnitPrice(){return unitPrice;} public void setUnitPrice(BigDecimal v){unitPrice=v;}
     public BigDecimal getTaxRate(){return taxRate;} public void setTaxRate(BigDecimal v){taxRate=v;}
+    public Long getProductId(){return productId;} public void setProductId(Long v){productId=v;}
 }

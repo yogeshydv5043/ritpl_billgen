@@ -15,6 +15,7 @@ import com.ritpl.billgen.entity.InvoiceStatus;
 import com.ritpl.billgen.security.AppUserPrincipal;
 import com.ritpl.billgen.security.TenantScope;
 import com.ritpl.billgen.service.CatalogService;
+import com.ritpl.billgen.service.CustomTemplateService;
 import com.ritpl.billgen.service.InvoiceService;
 import com.ritpl.billgen.service.SubscriptionService;
 import com.ritpl.billgen.web.form.InvoiceForm;
@@ -31,9 +32,10 @@ public class PortalInvoiceController {
     private final InvoiceService invoices;
     private final CatalogService catalog;
     private final SubscriptionService subscriptions;
+    private final CustomTemplateService customTemplates;
 
-    public PortalInvoiceController(InvoiceService invoices, CatalogService catalog, SubscriptionService subscriptions) {
-        this.invoices = invoices; this.catalog = catalog; this.subscriptions = subscriptions;
+    public PortalInvoiceController(InvoiceService invoices, CatalogService catalog, SubscriptionService subscriptions, CustomTemplateService customTemplates) {
+        this.invoices = invoices; this.catalog = catalog; this.subscriptions = subscriptions; this.customTemplates = customTemplates;
     }
 
     @GetMapping
@@ -59,7 +61,7 @@ public class PortalInvoiceController {
         TenantScope scope = TenantScope.from(principal);
         prepareForm(scope, model);
         if (errors.hasErrors()) return "portal/invoice-form";
-        if (form.getInitialStatus() == InvoiceStatus.PAID) {
+        if (form.getInitialStatus() != InvoiceStatus.DRAFT && form.getInitialStatus() != InvoiceStatus.SENT) {
             errors.reject("invoice.status", "A new invoice must start as a draft or sent invoice.");
             return "portal/invoice-form";
         }
@@ -81,6 +83,7 @@ public class PortalInvoiceController {
 
     @GetMapping("/{id}/print")
     public String print(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal principal, Model model) {
+        invoices.recordPrintExport(TenantScope.from(principal), id);
         model.addAttribute("invoice", invoices.findById(TenantScope.from(principal), id));
         model.addAttribute("backUrl", "/portal/invoices/" + id);
         return "invoices/print";
@@ -110,10 +113,12 @@ public class PortalInvoiceController {
 
     private void prepareForm(TenantScope scope, Model model) {
         var templates = subscriptions.accessibleTemplates(scope);
+        var customTemplateList = customTemplates.findActive(scope);
         model.addAttribute("templates", templates);
+        model.addAttribute("customTemplates", customTemplateList);
         model.addAttribute("products", catalog.findActive(scope));
         model.addAttribute("statuses", selectableStatuses());
-        model.addAttribute("hasTemplates", !templates.isEmpty());
+        model.addAttribute("hasTemplates", !templates.isEmpty() || !customTemplateList.isEmpty());
     }
 
     /** Statuses a customer may create a new invoice with. */

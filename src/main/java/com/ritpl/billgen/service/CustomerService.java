@@ -2,7 +2,9 @@ package com.ritpl.billgen.service;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -26,9 +28,10 @@ public class CustomerService {
     private final CustomerRepository customers;
     private final AppUserRepository users;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService audit;
 
-    public CustomerService(CustomerRepository customers, AppUserRepository users, PasswordEncoder passwordEncoder) {
-        this.customers = customers; this.users = users; this.passwordEncoder = passwordEncoder;
+    public CustomerService(CustomerRepository customers, AppUserRepository users, PasswordEncoder passwordEncoder, AuditService audit) {
+        this.customers = customers; this.users = users; this.passwordEncoder = passwordEncoder; this.audit = audit;
     }
 
     /** Admins may search all real customer accounts; customers only receive their own account. */
@@ -54,6 +57,55 @@ public class CustomerService {
         return users.findByCustomer_Id(customerId);
     }
 
+    /** Creates a self-service Customer account; plan activation is a separate immediate action. */
+    @Transactional
+    @CacheEvict(cacheNames = "dashboard", allEntries = true)
+    public Customer register(RegistrationCommand command) {
+        if (command == null) throw new IllegalArgumentException("Enter the account details.");
+        CustomerAccountCommand account = new CustomerAccountCommand(command.companyName(), command.contactName(), command.email(),
+                command.phone(), null, null, null, null, command.country(), null, command.email(), command.password(), true);
+        Customer customer = new Customer(null, null, null);
+        apply(account, customer);
+        validatePassword(command.password());
+        if (users.existsByEmailIgnoreCase(customer.getEmail())) throw new IllegalArgumentException("An account with this email already exists.");
+        customers.save(customer);
+        users.save(newLogin(customer.getEmail(), command.password(), customer, true));
+        audit.record(AuditEventCommand.success(customer.getId(), "REGISTER", "CUSTOMER", "Customer account", customer.getId(),
+                "Customer account registered; no paid subscription or payment credentials were created.", null,
+                Map.of("companyName", customer.getCompanyName(), "email", customer.getEmail())).withActor("PUBLIC_SIGNUP"));
+        return customer;
+    }
+
+    /** Customer-managed invoice identity and logo. The login email/password are never changed here. */
+    @Transactional
+    @CacheEvict(cacheNames = "dashboard", allEntries = true)
+    public Customer updateCompanyProfile(TenantScope scope, CompanyProfileCommand command) {
+        scope.requireWriteAccess();
+        long customerId = scope.requireCustomerId();
+        Customer customer = findById(scope, customerId);
+        if (command == null) throw new IllegalArgumentException("Enter the company profile.");
+        validateCompanyProfile(command);
+        String email = command.email().trim().toLowerCase(Locale.ROOT);
+        if (customers.existsByEmailIgnoreCaseAndIdNot(email, customerId)) throw new IllegalArgumentException("A company profile already uses this email.");
+        Map<String, Object> before = Map.of("companyName", customer.getCompanyName(), "email", customer.getEmail(),
+                "hasLogo", customer.getLogoData() != null && customer.getLogoData().length > 0);
+        customer.setCompanyName(command.companyName().trim()); customer.setContactName(command.contactName().trim());
+        customer.setEmail(email); customer.setPhone(blankToNull(command.phone())); customer.setBillingAddress(blankToNull(command.billingAddress()));
+        customer.setCity(blankToNull(command.city())); customer.setState(blankToNull(command.state()));
+        customer.setPostalCode(blankToNull(command.postalCode())); customer.setCountry(blankToNull(command.country()) == null ? "India" : command.country().trim());
+        customer.setGstin(blankToNull(command.gstin()));
+        if (command.clearLogo()) { customer.setLogoData(null); customer.setLogoContentType(null); }
+        else if (command.logoData() != null && command.logoData().length > 0) {
+            validateLogo(command.logoData(), command.logoContentType());
+            customer.setLogoData(command.logoData()); customer.setLogoContentType(command.logoContentType());
+        }
+        audit.record(AuditEventCommand.success(customerId, "UPDATE", "COMPANY_PROFILE", "Company profile", customerId,
+                "Customer updated its company invoice identity.", before,
+                Map.of("companyName", customer.getCompanyName(), "email", customer.getEmail(),
+                        "hasLogo", customer.getLogoData() != null && customer.getLogoData().length > 0)));
+        return customer;
+    }
+
     /** Creates the account together with the login that gives the account its own data scope. */
     @Transactional
     @CacheEvict(cacheNames = "dashboard", allEntries = true)
@@ -66,6 +118,9 @@ public class CustomerService {
         validatePassword(command.password());
         if (users.existsByEmailIgnoreCase(loginEmail)) throw new IllegalArgumentException("A login with this email already exists.");
         users.save(newLogin(loginEmail, command.password(), customer, command.loginEnabled() == null || command.loginEnabled()));
+        audit.record(AuditEventCommand.success(customer.getId(), "CREATE", "CUSTOMER", "Customer account", customer.getId(),
+                "Administrator created a customer account and login.", null,
+                Map.of("companyName", customer.getCompanyName(), "email", customer.getEmail(), "loginEnabled", command.loginEnabled() == null || command.loginEnabled())));
         return customer;
     }
 
@@ -74,9 +129,13 @@ public class CustomerService {
     public Customer updateAccount(TenantScope scope, long id, CustomerAccountCommand command) {
         requireAdmin(scope);
         Customer current = findById(scope, id);
+        Map<String, Object> before = Map.of("companyName", current.getCompanyName(), "email", current.getEmail());
         apply(command, current);
         customers.save(current);
         updateLogin(current, command);
+        audit.record(AuditEventCommand.success(id, "UPDATE", "CUSTOMER", "Customer account", id,
+                "Administrator updated customer account settings.", before,
+                Map.of("companyName", current.getCompanyName(), "email", current.getEmail())));
         return current;
     }
 
@@ -85,7 +144,9 @@ public class CustomerService {
     public void setLoginEnabled(TenantScope scope, long id, boolean enabled) {
         requireAdmin(scope);
         AppUser login = findLogin(scope, id).orElseThrow(() -> new ResourceNotFoundException("This account has no login."));
-        login.setEnabled(enabled);
+        boolean before = login.isEnabled(); login.setEnabled(enabled);
+        audit.record(AuditEventCommand.success(id, "UPDATE", "CUSTOMER_LOGIN", "Customer login", login.getId(),
+                "Administrator changed customer login availability.", Map.of("enabled", before), Map.of("enabled", enabled)));
     }
 
     @Transactional
@@ -94,6 +155,8 @@ public class CustomerService {
         validatePassword(password);
         AppUser login = findLogin(scope, id).orElseThrow(() -> new ResourceNotFoundException("This account has no login."));
         login.setPasswordHash(passwordEncoder.encode(password));
+        audit.record(AuditEventCommand.success(id, "RESET_PASSWORD", "CUSTOMER_LOGIN", "Customer login", login.getId(),
+                "Administrator reset a customer login password; the password itself is never logged.", null, Map.of("passwordChanged", true)));
     }
 
     private void apply(CustomerAccountCommand command, Customer customer) {
@@ -174,6 +237,35 @@ public class CustomerService {
         if (password == null || password.isBlank() || password.length() < MIN_PASSWORD_LENGTH) {
             throw new IllegalArgumentException("Set a login password of at least " + MIN_PASSWORD_LENGTH + " characters.");
         }
+    }
+
+    private void validateCompanyProfile(CompanyProfileCommand c) {
+        if (c.companyName() == null || c.companyName().isBlank() || c.companyName().trim().length() > 160)
+            throw new IllegalArgumentException("Enter a company name of at most 160 characters.");
+        if (c.contactName() == null || c.contactName().isBlank() || c.contactName().trim().length() > 120)
+            throw new IllegalArgumentException("Enter a contact name of at most 120 characters.");
+        if (c.email() == null || c.email().isBlank() || c.email().trim().length() > 190
+                || !Pattern.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$", c.email().trim()))
+            throw new IllegalArgumentException("Enter a valid company email address.");
+        if (c.phone() != null && c.phone().length() > 40 || c.billingAddress() != null && c.billingAddress().length() > 255
+                || c.city() != null && c.city().length() > 80 || c.state() != null && c.state().length() > 80
+                || c.postalCode() != null && c.postalCode().length() > 24 || c.country() != null && c.country().length() > 80
+                || c.gstin() != null && c.gstin().length() > 24)
+            throw new IllegalArgumentException("One of the company profile fields is too long.");
+        if (c.logoData() != null && c.logoData().length > 0) validateLogo(c.logoData(), c.logoContentType());
+    }
+
+    private void validateLogo(byte[] data, String contentType) {
+        if (data == null || data.length == 0) return;
+        if (data.length > 1_048_576) throw new IllegalArgumentException("Company logo must be 1 MB or smaller.");
+        boolean png = "image/png".equalsIgnoreCase(contentType) && data.length >= 8
+                && (data[0] & 0xff) == 0x89 && data[1] == 0x50 && data[2] == 0x4e && data[3] == 0x47;
+        boolean jpeg = "image/jpeg".equalsIgnoreCase(contentType) && data.length >= 3
+                && (data[0] & 0xff) == 0xff && (data[1] & 0xff) == 0xd8 && (data[2] & 0xff) == 0xff;
+        boolean webp = "image/webp".equalsIgnoreCase(contentType) && data.length >= 12
+                && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F'
+                && data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P';
+        if (!png && !jpeg && !webp) throw new IllegalArgumentException("Upload a valid PNG, JPEG or WebP company logo.");
     }
 
     private void requireAdmin(TenantScope scope) {

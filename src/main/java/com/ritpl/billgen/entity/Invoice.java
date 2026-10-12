@@ -1,11 +1,12 @@
 package com.ritpl.billgen.entity;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
-
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -27,52 +28,74 @@ import jakarta.persistence.Table;
 @Entity
 @Table(name = "invoices", indexes = {
         @Index(name = "idx_invoices_customer_date", columnList = "customer_id, issue_date"),
-        @Index(name = "idx_invoices_status_due", columnList = "status, due_date")
+        @Index(name = "idx_invoices_status_due", columnList = "status, due_date"),
+        @Index(name = "idx_invoices_generated_at", columnList = "generated_at")
 })
 public class Invoice {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    @Column(name = "invoice_number", nullable = false, unique = true, length = 32)
-    private String invoiceNumber;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "customer_id", nullable = false)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @Column(name = "invoice_number", nullable = false, unique = true, length = 32) private String invoiceNumber;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
     @Column(name = "issue_date", nullable = false) private LocalDate issueDate;
     @Column(name = "due_date", nullable = false) private LocalDate dueDate;
-    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 16)
-    private InvoiceStatus status = InvoiceStatus.DRAFT;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 16) private InvoiceStatus status = InvoiceStatus.DRAFT;
     @Column(nullable = false, length = 3) private String currency = "INR";
-    /** Template snapshot for this invoice. Access is checked against the customer's current plan on creation. */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "template_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "template_id")
     private BillTemplate template;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "custom_template_id")
+    private CustomInvoiceTemplate customTemplate;
+    @Column(name = "template_name_snapshot", length = 100) private String templateNameSnapshot;
+    @Column(name = "template_style_snapshot", length = 20) private String templateStyleSnapshot;
+    @Column(name = "template_accent_snapshot", length = 7) private String templateAccentSnapshot;
     @Column(length = 1200) private String notes;
     @Column(nullable = false, precision = 14, scale = 2) private BigDecimal subtotal = BigDecimal.ZERO;
     @Column(name = "tax_amount", nullable = false, precision = 14, scale = 2) private BigDecimal taxAmount = BigDecimal.ZERO;
+    @Column(name = "discount_amount", nullable = false, precision = 14, scale = 2) private BigDecimal discountAmount = BigDecimal.ZERO;
     @Column(name = "total_amount", nullable = false, precision = 14, scale = 2) private BigDecimal totalAmount = BigDecimal.ZERO;
+    @Column(name = "company_name_snapshot", length = 160) private String companyNameSnapshot;
+    @Column(name = "company_contact_snapshot", length = 120) private String companyContactSnapshot;
+    @Column(name = "company_email_snapshot", length = 190) private String companyEmailSnapshot;
+    @Column(name = "company_phone_snapshot", length = 40) private String companyPhoneSnapshot;
+    @Column(name = "company_address_snapshot", length = 600) private String companyAddressSnapshot;
+    @Column(name = "company_gstin_snapshot", length = 24) private String companyGstinSnapshot;
+    @Column(name = "company_logo_snapshot", columnDefinition = "bytea") private byte[] companyLogoSnapshot;
+    @Column(name = "company_logo_content_type_snapshot", length = 40) private String companyLogoContentTypeSnapshot;
     @Column(name = "paid_at") private LocalDateTime paidAt;
+    @Column(name = "cancelled_at") private Instant cancelledAt;
+    @Column(name = "generated_at", nullable = false) private Instant generatedAt;
+    @Column(name = "usage_counted", nullable = false) private boolean usageCounted;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "usage_subscription_id")
+    private CustomerSubscription usageSubscription;
     @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("id ASC") private List<InvoiceItem> items = new ArrayList<>();
     @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
     @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
 
     public Invoice() { }
-    public void addItem(InvoiceItem item) {
-        items.add(item);
-        item.setInvoice(this);
-        item.setCustomer(customer);
+    public void addItem(InvoiceItem item) { items.add(item); item.setInvoice(this); item.setCustomer(customer); }
+    @PrePersist void onCreate() {
+        LocalDateTime n = LocalDateTime.now(); createdAt = n; updatedAt = n;
+        if (generatedAt == null) generatedAt = Instant.now();
     }
-    @PrePersist void onCreate() { LocalDateTime n = LocalDateTime.now(); createdAt = n; updatedAt = n; }
     @PreUpdate void onUpdate() { updatedAt = LocalDateTime.now(); }
     public boolean isOverdue(LocalDate day) { return status == InvoiceStatus.SENT && dueDate.isBefore(day); }
+    public String getTemplateCode() { return customTemplate != null ? "CUSTOM-" + customTemplate.getId() : template == null ? null : template.getCode(); }
+    public String getTemplateName() { return templateNameSnapshot != null ? templateNameSnapshot : customTemplate != null ? customTemplate.getName() : template == null ? null : template.getName(); }
+    public String getTemplateCssClass() {
+        String style = templateStyleSnapshot != null ? templateStyleSnapshot : customTemplate != null ? customTemplate.getStyleKey() : template == null ? "CLASSIC" : template.getStyleCode();
+        try { return BillTemplateStyle.valueOf(style).getCssClass(); } catch (RuntimeException ex) { return BillTemplateStyle.CLASSIC.getCssClass(); }
+    }
+    public String getTemplateAccentColor() { return templateAccentSnapshot != null ? templateAccentSnapshot : customTemplate != null ? customTemplate.getAccentColor() : template == null ? null : template.getAccentColor(); }
+    public String getCompanyLogoDataUrl() {
+        return companyLogoSnapshot == null || companyLogoSnapshot.length == 0 || companyLogoContentTypeSnapshot == null
+                ? null : "data:" + companyLogoContentTypeSnapshot + ";base64," + Base64.getEncoder().encodeToString(companyLogoSnapshot);
+    }
     public Long getId() { return id; }
     public String getInvoiceNumber() { return invoiceNumber; }
     public void setInvoiceNumber(String v) { invoiceNumber = v; }
     public Customer getCustomer() { return customer; }
-    public void setCustomer(Customer v) {
-        customer = v;
-        for (InvoiceItem item : items) item.setCustomer(v);
-    }
+    public Long getCustomerId() { return customer == null ? null : customer.getId(); }
+    public void setCustomer(Customer v) { customer = v; for (InvoiceItem item : items) item.setCustomer(v); }
     public LocalDate getIssueDate() { return issueDate; }
     public void setIssueDate(LocalDate v) { issueDate = v; }
     public LocalDate getDueDate() { return dueDate; }
@@ -83,19 +106,51 @@ public class Invoice {
     public void setCurrency(String v) { currency = v; }
     public BillTemplate getTemplate() { return template; }
     public void setTemplate(BillTemplate v) { template = v; }
-    public String getTemplateCode() { return template == null ? null : template.getCode(); }
-    public String getTemplateName() { return template == null ? null : template.getName(); }
-    public String getTemplateCssClass() { return template == null ? BillTemplateStyle.CLASSIC.getCssClass() : template.getStyleCssClass(); }
+    public CustomInvoiceTemplate getCustomTemplate() { return customTemplate; }
+    public void setCustomTemplate(CustomInvoiceTemplate v) { customTemplate = v; }
+    public String getTemplateNameSnapshot() { return templateNameSnapshot; }
+    public void setTemplateNameSnapshot(String v) { templateNameSnapshot = v; }
+    public String getTemplateStyleSnapshot() { return templateStyleSnapshot; }
+    public void setTemplateStyleSnapshot(String v) { templateStyleSnapshot = v; }
+    public String getTemplateAccentSnapshot() { return templateAccentSnapshot; }
+    public void setTemplateAccentSnapshot(String v) { templateAccentSnapshot = v; }
     public String getNotes() { return notes; }
     public void setNotes(String v) { notes = v; }
     public BigDecimal getSubtotal() { return subtotal; }
     public void setSubtotal(BigDecimal v) { subtotal = v; }
     public BigDecimal getTaxAmount() { return taxAmount; }
     public void setTaxAmount(BigDecimal v) { taxAmount = v; }
+    public BigDecimal getDiscountAmount() { return discountAmount; }
+    public void setDiscountAmount(BigDecimal v) { discountAmount = v; }
     public BigDecimal getTotalAmount() { return totalAmount; }
     public void setTotalAmount(BigDecimal v) { totalAmount = v; }
+    public String getCompanyNameSnapshot() { return companyNameSnapshot; }
+    public void setCompanyNameSnapshot(String v) { companyNameSnapshot = v; }
+    public String getCompanyContactSnapshot() { return companyContactSnapshot; }
+    public void setCompanyContactSnapshot(String v) { companyContactSnapshot = v; }
+    public String getCompanyEmailSnapshot() { return companyEmailSnapshot; }
+    public void setCompanyEmailSnapshot(String v) { companyEmailSnapshot = v; }
+    public String getCompanyPhoneSnapshot() { return companyPhoneSnapshot; }
+    public void setCompanyPhoneSnapshot(String v) { companyPhoneSnapshot = v; }
+    public String getCompanyAddressSnapshot() { return companyAddressSnapshot; }
+    public void setCompanyAddressSnapshot(String v) { companyAddressSnapshot = v; }
+    public String getCompanyGstinSnapshot() { return companyGstinSnapshot; }
+    public void setCompanyGstinSnapshot(String v) { companyGstinSnapshot = v; }
+    public byte[] getCompanyLogoSnapshot() { return companyLogoSnapshot; }
+    public void setCompanyLogoSnapshot(byte[] v) { companyLogoSnapshot = v == null ? null : v.clone(); }
+    public String getCompanyLogoContentTypeSnapshot() { return companyLogoContentTypeSnapshot; }
+    public void setCompanyLogoContentTypeSnapshot(String v) { companyLogoContentTypeSnapshot = v; }
     public LocalDateTime getPaidAt() { return paidAt; }
     public void setPaidAt(LocalDateTime v) { paidAt = v; }
+    public Instant getCancelledAt() { return cancelledAt; }
+    public void setCancelledAt(Instant v) { cancelledAt = v; }
+    public Instant getGeneratedAt() { return generatedAt; }
+    public void setGeneratedAt(Instant v) { generatedAt = v; }
+    public boolean isUsageCounted() { return usageCounted; }
+    public void setUsageCounted(boolean v) { usageCounted = v; }
+    public CustomerSubscription getUsageSubscription() { return usageSubscription; }
+    public void setUsageSubscription(CustomerSubscription v) { usageSubscription = v; }
     public List<InvoiceItem> getItems() { return items; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
 }

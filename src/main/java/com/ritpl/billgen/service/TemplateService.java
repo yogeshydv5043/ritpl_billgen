@@ -3,6 +3,7 @@ package com.ritpl.billgen.service;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
@@ -26,9 +27,11 @@ public class TemplateService {
     private final BillTemplateRepository templates;
     private final SubscriptionPlanRepository plans;
     private final InvoiceRepository invoices;
+    private final AuditService audit;
 
-    public TemplateService(BillTemplateRepository templates, SubscriptionPlanRepository plans, InvoiceRepository invoices) {
-        this.templates = templates; this.plans = plans; this.invoices = invoices;
+    public TemplateService(BillTemplateRepository templates, SubscriptionPlanRepository plans,
+            InvoiceRepository invoices, AuditService audit) {
+        this.templates = templates; this.plans = plans; this.invoices = invoices; this.audit = audit;
     }
 
     @Transactional(readOnly = true)
@@ -62,6 +65,7 @@ public class TemplateService {
         boolean duplicate = id == null ? templates.existsByCodeIgnoreCase(code) : templates.existsByCodeIgnoreCaseAndIdNot(code, id);
         if (duplicate) throw new IllegalArgumentException("That template code is already in use.");
         BillTemplate template = id == null ? new BillTemplate(code, command.name().trim(), command.style()) : findById(id);
+        Map<String, Object> before = id == null ? null : Map.of("name", template.getName(), "active", template.isActive(), "style", template.getStyle().name());
         template.setCode(code);
         template.setName(command.name().trim());
         template.setDescription(blankToNull(command.description()));
@@ -69,12 +73,21 @@ public class TemplateService {
         template.setAccentColor(blankToNull(command.accentColor()));
         template.setActive(command.active());
         template.setSortOrder(command.sortOrder());
-        return templates.save(template);
+        BillTemplate saved = templates.save(template);
+        audit.record(AuditEventCommand.success(null, id == null ? "CREATE" : "UPDATE", "TEMPLATE", "Bill template", saved.getId(),
+                id == null ? "Admin created a bill template." : "Admin updated a bill template.", before,
+                Map.of("name", saved.getName(), "active", saved.isActive(), "style", saved.getStyle().name())));
+        return saved;
     }
 
     @Transactional
     @CacheEvict(cacheNames = {"active-plans", "customer-templates", "dashboard"}, allEntries = true)
-    public void setActive(long id, boolean active) { findById(id).setActive(active); }
+    public void setActive(long id, boolean active) {
+        BillTemplate template = findById(id);
+        boolean before = template.isActive(); template.setActive(active);
+        audit.record(AuditEventCommand.success(null, "UPDATE_STATUS", "TEMPLATE", "Bill template", id,
+                "Admin changed bill template availability.", Map.of("active", before), Map.of("active", active)));
+    }
 
     /**
      * Removes a template that is not in use. A template that is bundled with a plan or already
@@ -90,7 +103,9 @@ public class TemplateService {
         if (plans.countByTemplate(id) > 0) {
             throw new IllegalArgumentException("Remove this template from its plans before deleting it.");
         }
-        templates.delete(template);
+        String name = template.getName(); templates.delete(template);
+        audit.record(AuditEventCommand.success(null, "DELETE", "TEMPLATE", "Bill template", id,
+                "Admin deleted an unused bill template.", Map.of("name", name), null));
     }
 
     private void validate(TemplateCommand c) {

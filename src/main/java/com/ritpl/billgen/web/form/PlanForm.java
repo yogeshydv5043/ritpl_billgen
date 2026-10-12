@@ -23,11 +23,12 @@ public class PlanForm {
     @NotBlank @Pattern(regexp="[A-Za-z]{3}") private String currency = "INR";
     @Min(1) private int maxCustomers = 25;
     @Min(1) private int maxMonthlyInvoices = 50;
+    @Min(1) private int maxProducts = 100;
+    @Min(0) private int maxCustomTemplates = 3;
     @NotBlank @Size(max=5000) private String features;
     private boolean featured;
     private boolean active = true;
     private int sortOrder = 10;
-    /** Bill templates included with this plan; a customer may use these and nothing else. */
     private Set<Long> templateIds = new LinkedHashSet<>();
 
     public static PlanForm from(SubscriptionPlan p) {
@@ -35,6 +36,7 @@ public class PlanForm {
         f.code = p.getCode(); f.name = p.getName(); f.tagline = p.getTagline(); f.description = p.getDescription();
         f.monthlyPrice = p.getMonthlyPrice(); f.annualPrice = p.getAnnualPrice(); f.currency = p.getCurrency();
         f.maxCustomers = p.getMaxCustomers(); f.maxMonthlyInvoices = p.getMaxMonthlyInvoices();
+        f.maxProducts = p.getMaxProducts(); f.maxCustomTemplates = p.getMaxCustomTemplates();
         f.features = p.getFeatures(); f.featured = p.isFeatured(); f.active = p.isActive(); f.sortOrder = p.getSortOrder();
         f.templateIds = new LinkedHashSet<>(p.getTemplateIds());
         return f;
@@ -42,9 +44,8 @@ public class PlanForm {
 
     public PlanCommand toCommand() {
         return new PlanCommand(code, name, tagline, description, monthlyPrice, annualPrice, currency,
-                maxCustomers, maxMonthlyInvoices, features, featured, active, sortOrder, templateIds);
+                maxCustomers, maxMonthlyInvoices, maxProducts, maxCustomTemplates, features, featured, active, sortOrder, templateIds);
     }
-
     public String getCode(){return code;} public void setCode(String v){code=v;}
     public String getName(){return name;} public void setName(String v){name=v;}
     public String getTagline(){return tagline;} public void setTagline(String v){tagline=v;}
@@ -54,6 +55,8 @@ public class PlanForm {
     public String getCurrency(){return currency;} public void setCurrency(String v){currency=v;}
     public int getMaxCustomers(){return maxCustomers;} public void setMaxCustomers(int v){maxCustomers=v;}
     public int getMaxMonthlyInvoices(){return maxMonthlyInvoices;} public void setMaxMonthlyInvoices(int v){maxMonthlyInvoices=v;}
+    public int getMaxProducts(){return maxProducts;} public void setMaxProducts(int v){maxProducts=v;}
+    public int getMaxCustomTemplates(){return maxCustomTemplates;} public void setMaxCustomTemplates(int v){maxCustomTemplates=v;}
     public String getFeatures(){return features;} public void setFeatures(String v){features=v;}
     public boolean isFeatured(){return featured;} public void setFeatured(boolean v){featured=v;}
     public boolean isActive(){return active;} public void setActive(boolean v){active=v;}

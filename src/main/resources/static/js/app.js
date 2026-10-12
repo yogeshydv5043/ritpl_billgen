@@ -21,6 +21,9 @@
     const list = document.getElementById('invoice-lines');
     const addButton = document.getElementById('add-line');
     const currencySelect = document.getElementById('currency');
+    const discountInput = document.getElementById('discountAmount');
+    const standardTemplate = document.getElementById('templateId');
+    const customTemplate = document.getElementById('customTemplateId');
     if (!list) return;
 
     const money = (amount) => {
@@ -55,13 +58,16 @@
         const quantity = Number.parseFloat(row.querySelector('.line-quantity')?.value) || 0;
         const price = Number.parseFloat(row.querySelector('.line-price')?.value) || 0;
         const tax = Number.parseFloat(row.querySelector('.line-tax')?.value) || 0;
-        const amount = quantity * price * (1 + tax / 100);
+        const subtotal = Math.round((quantity * price + Number.EPSILON) * 100) / 100;
+        const taxAmount = Math.round((subtotal * tax / 100 + Number.EPSILON) * 100) / 100;
+        const amount = subtotal + taxAmount;
         grandTotal += amount;
         const lineTotal = row.querySelector('.line-total');
         if (lineTotal) lineTotal.textContent = money(amount);
       });
+      const discount = Number.parseFloat(document.getElementById('discountAmount')?.value) || 0;
       const estimate = document.getElementById('invoice-estimate');
-      if (estimate) estimate.textContent = money(grandTotal);
+      if (estimate) estimate.textContent = money(Math.max(0, grandTotal - discount));
     };
 
     const addLine = () => {
@@ -85,6 +91,9 @@
     };
 
     currencySelect?.addEventListener('change', calculate);
+    discountInput?.addEventListener('input', calculate);
+    standardTemplate?.addEventListener('change', () => { if (standardTemplate.value && customTemplate) customTemplate.value = ''; });
+    customTemplate?.addEventListener('change', () => { if (customTemplate.value && standardTemplate) standardTemplate.value = ''; });
 
     list.addEventListener('input', (event) => {
       if (event.target.matches('.line-quantity, .line-price, .line-tax')) calculate();
@@ -93,12 +102,14 @@
       if (event.target.matches('.product-picker')) {
         const row = event.target.closest('[data-invoice-line]');
         const selected = event.target.selectedOptions[0];
+        const productId = row.querySelector('.line-product-id');
+        if (productId) productId.value = event.target.value || '';
         if (selected?.dataset.name) {
           row.querySelector('.line-description').value = selected.dataset.name;
           row.querySelector('.line-price').value = selected.dataset.price || '0.00';
           row.querySelector('.line-tax').value = selected.dataset.tax || '0.00';
-          calculate();
         }
+        calculate();
       }
       if (event.target === currencySelect) calculate();
     });
