@@ -90,12 +90,14 @@ class InvoiceServiceQuotaTest {
     @Test
     void totalsAreCalculatedOnTheServerAndIgnoreAnyClientProvidedAmounts() {
         Customer owner = owner();
+        CustomerSubscription subscription = subscription(10, 0);
         when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(owner));
-        when(subscriptions.requireActiveForUpdate(any())).thenReturn(subscription(10, 0));
+        when(subscriptions.requireActiveForUpdate(any())).thenReturn(subscription);
         when(invoices.countByUsageSubscription_IdAndUsageCountedTrue(7L)).thenReturn(0L);
         when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(42L);
         when(invoices.saveAndFlush(any(Invoice.class))).thenAnswer(call -> call.getArgument(0));
-        when(subscriptions.requireAccessibleTemplate(any(), eq(1L))).thenReturn(billTemplate());
+        com.ritpl.billgen.entity.BillTemplate chosen = billTemplate();
+        when(subscriptions.requireAccessibleTemplate(any(), eq(1L))).thenReturn(chosen);
 
         // Prices and tax come from the product record, never from the submitted line.
         var priced = new com.ritpl.billgen.entity.CatalogProduct(owner, "SKU-1", "Design workshop",
@@ -178,7 +180,8 @@ class InvoiceServiceQuotaTest {
         when(invoices.countByUsageSubscription_IdAndUsageCountedTrue(7L)).thenReturn(alreadyCounted);
         when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(1L);
         when(invoices.saveAndFlush(any(Invoice.class))).thenAnswer(call -> call.getArgument(0));
-        when(subscriptions.requireAccessibleTemplate(any(), eq(1L))).thenReturn(billTemplate());
+        com.ritpl.billgen.entity.BillTemplate chosen = billTemplate();
+        when(subscriptions.requireAccessibleTemplate(any(), eq(1L))).thenReturn(chosen);
         return service.create(TenantScope.ofCustomer(CUSTOMER_ID), command(status));
     }
 

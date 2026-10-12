@@ -47,8 +47,9 @@ class CustomTemplateServiceTest {
     @Test
     void creatingATemplateIsBlockedWhenTheAllowanceIsExhausted() {
         Customer owner = customer();
+        CustomerSubscription subscription = subscription(1);
         when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(owner));
-        when(subscriptions.requireActiveForUpdate(any())).thenReturn(subscription(1));
+        when(subscriptions.requireActiveForUpdate(any())).thenReturn(subscription);
         when(templates.countByCustomer_IdAndActiveTrue(CUSTOMER_ID)).thenReturn(1L);
 
         assertThrows(IllegalArgumentException.class,
@@ -61,8 +62,9 @@ class CustomTemplateServiceTest {
     void creatingATemplateIsAllowedWhileTheAllowanceRemains() {
         Customer owner = customer();
         CustomInvoiceTemplate saved = new CustomInvoiceTemplate(owner, "Autumn brand", BillTemplateStyle.MODERN, "#2563EB");
+        CustomerSubscription subscription = subscription(1);
         when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(owner));
-        when(subscriptions.requireActiveForUpdate(any())).thenReturn(subscription(1));
+        when(subscriptions.requireActiveForUpdate(any())).thenReturn(subscription);
         when(templates.countByCustomer_IdAndActiveTrue(CUSTOMER_ID)).thenReturn(0L);
         when(templates.save(any(CustomInvoiceTemplate.class))).thenReturn(saved);
 
