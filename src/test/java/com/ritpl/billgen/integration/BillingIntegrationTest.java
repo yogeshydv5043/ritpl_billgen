@@ -218,11 +218,18 @@ class BillingIntegrationTest {
                 record.getCustomer() == null ? firstCustomerId : record.getCustomer().getId(),
                 "every row the tenant can read belongs to that tenant"));
 
+        // The scheduled/system actor writes these rows, so the filter has to match it; a filter
+        // that matches nothing must return zero rows rather than the whole estate.
         Page<AuditRecord> filtered = auditService.search(first.scope(),
-                new AuditFilter(null, "owner", "CREATE", "INVOICE", "SUCCESS",
-                        java.time.Instant.now().minusSeconds(300), java.time.Instant.now().plusSeconds(300)),
+                new AuditFilter(null, "system", "CREATE", "INVOICE", "SUCCESS",
+                        java.time.Instant.now().minusSeconds(600), java.time.Instant.now().plusSeconds(600)),
                 PageRequest.of(0, 20));
         assertTrue(filtered.getTotalElements() >= 1, "an actor, outcome and date range narrow the same tenant's rows");
+
+        Page<AuditRecord> unmatched = auditService.search(first.scope(),
+                new AuditFilter(null, "nobody-at-all", "CREATE", "INVOICE", "SUCCESS", null, null),
+                PageRequest.of(0, 20));
+        assertEquals(0, unmatched.getTotalElements(), "filters are applied, not ignored");
 
         Page<AuditRecord> otherAudit = auditService.search(second.scope(),
                 new AuditFilter(null, null, "CREATE", "INVOICE", null, null, null), PageRequest.of(0, 20));
