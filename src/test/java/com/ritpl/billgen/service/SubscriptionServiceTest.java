@@ -100,7 +100,8 @@ class SubscriptionServiceTest {
 
     @Test
     void customersCannotOverrideTheirOwnLimits() {
-        when(subscriptions.findById(7L)).thenReturn(Optional.of(activeSubscription(plan(100, 50, 1), 0)));
+        CustomerSubscription subscription = activeSubscription(plan(100, 50, 1), 0);
+        when(subscriptions.findById(7L)).thenReturn(Optional.of(subscription));
 
         assertThrows(AccessDeniedException.class,
                 () -> service.updateLimits(TenantScope.ofCustomer(CUSTOMER_ID), 7L, 150, null, 2, "customer@acme.test"));
@@ -108,7 +109,8 @@ class SubscriptionServiceTest {
 
     @Test
     void invalidLimitOverridesAreRejected() {
-        when(subscriptions.findById(7L)).thenReturn(Optional.of(activeSubscription(plan(100, 50, 1), 0)));
+        CustomerSubscription subscription = activeSubscription(plan(100, 50, 1), 0);
+        when(subscriptions.findById(7L)).thenReturn(Optional.of(subscription));
 
         assertThrows(IllegalArgumentException.class,
                 () -> service.updateLimits(TenantScope.administrator(), 7L, 0, null, null, "admin@ritpl.test"));
@@ -175,7 +177,9 @@ class SubscriptionServiceTest {
     }
 
     private void startRenewal(CustomerSubscription current, SubscriptionPlan nextPlan) {
-        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer()));
+        // Build the fixtures first: stubbing one mock inside another when(...) breaks Mockito.
+        Customer owner = customer();
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(owner));
         when(plans.findById(2L)).thenReturn(Optional.of(nextPlan));
         when(subscriptions.findForUpdate(CUSTOMER_ID, SubscriptionStatus.ACTIVE)).thenReturn(Optional.of(current));
         when(subscriptions.saveAndFlush(any(CustomerSubscription.class)))
