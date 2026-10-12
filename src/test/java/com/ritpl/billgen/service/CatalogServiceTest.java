@@ -86,6 +86,7 @@ class CatalogServiceTest {
         when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(owner));
         when(subscriptions.requireActiveForUpdate(any())).thenReturn(subscription);
         when(products.countByCustomer_Id(CUSTOMER_ID)).thenReturn(3L);
+        when(products.save(any(CatalogProduct.class))).thenAnswer(call -> call.getArgument(0));
 
         service.save(TenantScope.ofCustomer(CUSTOMER_ID), 55L, command());
 
