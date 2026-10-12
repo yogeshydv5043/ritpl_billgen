@@ -73,7 +73,7 @@ mvn spring-boot:run
 
 The sample local role uses `billgen_dev_only`. If your existing PostgreSQL role has another password, either change `POSTGRES_PASSWORD` in `.env` to that role's password or set `SPRING_DATASOURCE_PASSWORD` in the shell. `SPRING_DATASOURCE_PASSWORD` takes precedence. The `.env` import is optional; environment variables always override it.
 
-For `prod`, the required datasource and Redis settings have no fallback defaults. Run `mvn test` for unit tests, or `mvn package` to build the executable `target/billgen.jar`.
+For `prod`, the required datasource and Redis settings have no fallback defaults. Run `mvn test` for the unit tier (plus the PostgreSQL integration tier when Docker is available), or `mvn package` to build the executable `target/billgen.jar`.
 
 ## Troubleshooting: PostgreSQL password authentication
 

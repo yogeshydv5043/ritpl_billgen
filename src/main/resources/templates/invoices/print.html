@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{fragments/layout :: head(${invoice.invoiceNumber})}"></head>
-<body class="print-page"><div class="print-toolbar"><a th:href="${backUrl != null ? backUrl : '/invoices/' + invoice.id}" class="button button-quiet">← Back</a><span>Print preview <b>·</b> <span th:text="${invoice.invoiceNumber}">INV-001001</span></span><button class="button button-primary button-small" type="button" onclick="window.print()">Print / Save PDF <span>↗</span></button></div>
+<body class="print-page"><div class="print-toolbar"><a th:href="${backUrl != null ? backUrl : '/invoices/' + invoice.id}" class="button button-quiet">← Back</a><span>Print preview <b>·</b> <span th:text="${invoice.invoiceNumber}">INV-001001</span></span><a class="button button-primary button-small" th:if="${pdfUrl != null}" th:href="@{${pdfUrl}}">Download PDF <span>↓</span></a><button class="button button-secondary button-small" type="button" onclick="window.print()">Print <span>↗</span></button></div>
 <main class="print-sheet" th:classappend="${invoice.templateCssClass}" th:style="${invoice.templateAccentColor != null ? '--template-accent: ' + invoice.templateAccentColor : ''}">
     <div class="print-head"><div class="brand brand-print"><span class="brand-mark">b<span>.</span></span><span class="brand-copy"><strong>billgen</strong><small>INVOICE STUDIO</small></span></div><div class="print-title"><span>INVOICE</span><h1 th:text="${invoice.invoiceNumber}">INV-001001</h1><span class="print-status" th:text="${invoice.status}">SENT</span></div></div>
     <div class="print-rule"></div>

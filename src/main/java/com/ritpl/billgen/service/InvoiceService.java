@@ -156,6 +156,20 @@ public class InvoiceService {
         return invoice;
     }
 
+    /**
+     * Authorises a PDF download and records it. The returned invoice carries its own snapshots, so
+     * the renderer never needs to read the current company profile, catalogue or template.
+     */
+    @Transactional
+    public Invoice preparePdfDownload(TenantScope scope, long id) {
+        Invoice invoice = findById(scope, id);
+        audit.record(AuditEventCommand.success(invoice.getCustomerId(), "EXPORT", "INVOICE", "Invoice", id,
+                "Invoice PDF downloaded.", null,
+                Map.of("invoiceNumber", invoice.getInvoiceNumber(), "exportType", "PDF",
+                        "totalAmount", invoice.getTotalAmount(), "currency", invoice.getCurrency())));
+        return invoice;
+    }
+
     @Transactional
     public void recordPrintExport(TenantScope scope, long id) {
         Invoice invoice = findById(scope, id);

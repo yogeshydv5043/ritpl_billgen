@@ -34,9 +34,12 @@ public class PortalInvoiceController {
     private final CatalogService catalog;
     private final SubscriptionService subscriptions;
     private final CustomTemplateService customTemplates;
+    private final com.ritpl.billgen.service.InvoicePdfService invoicePdf;
 
-    public PortalInvoiceController(InvoiceService invoices, CatalogService catalog, SubscriptionService subscriptions, CustomTemplateService customTemplates) {
+    public PortalInvoiceController(InvoiceService invoices, CatalogService catalog, SubscriptionService subscriptions,
+            CustomTemplateService customTemplates, com.ritpl.billgen.service.InvoicePdfService invoicePdf) {
         this.invoices = invoices; this.catalog = catalog; this.subscriptions = subscriptions; this.customTemplates = customTemplates;
+        this.invoicePdf = invoicePdf;
     }
 
     @GetMapping
@@ -92,7 +95,17 @@ public class PortalInvoiceController {
         invoices.recordPrintExport(TenantScope.from(principal), id);
         model.addAttribute("invoice", invoices.findById(TenantScope.from(principal), id));
         model.addAttribute("backUrl", "/portal/invoices/" + id);
+        // The shared print view links to the caller's own download route, never the other role's.
+        model.addAttribute("pdfUrl", "/portal/invoices/" + id + "/invoice.pdf");
         return "invoices/print";
+    }
+
+    @GetMapping("/{id}/invoice.pdf")
+    public org.springframework.http.ResponseEntity<byte[]> downloadPdf(@PathVariable long id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        // Authorization, the audit entry and the snapshot values all come from the service layer.
+        var invoice = invoices.preparePdfDownload(TenantScope.from(principal), id);
+        return InvoicePdfDownload.of(invoice, id, invoicePdf.render(invoice));
     }
 
     @PostMapping("/{id}/send")

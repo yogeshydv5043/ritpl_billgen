@@ -105,7 +105,19 @@ mvn test
 mvn package
 ```
 
-The invoice calculator, tenant-scope rules and invoice tenant isolation have unit tests. A live integration check also needs PostgreSQL, Redis and Docker; run `docker compose up --build` and test the pages/API in a browser/client.
+Testing happens in two tiers.
+
+| Tier | Command | What it needs | What it proves |
+| --- | --- | --- | --- |
+| Unit | `mvn test` | nothing but the JDK | server-side invoice math (tax, flat discount, rounding), tenant-scope rules, quota and allowance policy, export windowing and formula-injection protection |
+| Integration | `mvn test` with Docker running | Docker (Testcontainers starts PostgreSQL 16) | Flyway migrations apply, the JPA mapping validates against the schema, every Spring Data query parses and plans, concurrent invoice generation cannot exceed the allowance, invoice snapshots survive later edits, expiry blocks writes but not history, audit search stays inside the tenant, and expiry reminders are never duplicated |
+
+`BillingIntegrationTest` skips itself automatically when Docker is unavailable, so `mvn test` still
+passes on a machine without a container runtime. Redis is not required for the tests; sessions and
+caches are switched off in the test context.
+
+For the full multi-service stack (Nginx, gateway, two app instances, PostgreSQL, Redis) run
+`docker compose up --build` and exercise the pages and API in a browser or client.
 
 ### Continuous integration
 
@@ -117,4 +129,7 @@ mvn -B -ntp test
 mvn -B -ntp -DskipTests package
 ```
 
-Surefire reports are uploaded as a workflow artifact on every run, including failures. The job uses a throwaway `billgen_test` database with CI-only credentials, so no real environment values are required.
+Surefire reports are uploaded as a workflow artifact on every run, including failures, and the test
+totals are published as a check-run annotation. The integration tests bring up their own throwaway
+PostgreSQL container, so the workflow needs no database credentials at all. When CI fails, the
+Maven diagnostics and the failing Surefire reports are posted as a comment on the open pull request.

@@ -15,28 +15,6 @@ jobs:
       issues: write
       pull-requests: write
 
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: billgen_test
-          POSTGRES_USER: billgen
-          POSTGRES_PASSWORD: billgen_ci_only
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U billgen -d billgen_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-
-    env:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/billgen_test
-      SPRING_DATASOURCE_USERNAME: billgen
-      SPRING_DATASOURCE_PASSWORD: billgen_ci_only
-      SPRING_DATA_REDIS_HOST: localhost
-      SPRING_DATA_REDIS_PORT: "6379"
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
