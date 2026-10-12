@@ -2,7 +2,7 @@
 
 BillGen is a multi-tenant billing and invoice workspace built with Java 17, Spring Boot, PostgreSQL, Redis, Spring Security and Thymeleaf. It includes tenant-isolated customer workspaces, company profiles and logo snapshots, products and categories, plan/template entitlements and quotas, server-calculated invoices and discounts, subscription expiry reminders, protected audit trails, scoped Excel exports, an authenticated REST API, a Spring Cloud API gateway, and an Nginx reverse proxy/load balancer.
 
-> **Project status:** the application has exactly two roles: Admin (`ADMIN`) and Customer (`CUSTOMER`). Customers can activate an available plan from their portal, or an Admin can assign a plan. Activation is immediate; payment checkout, outbound email delivery and server-side PDF generation are not included. Invoice print views can be saved as PDF in the browser.
+> **Project status:** the application has exactly two roles: Admin (`ADMIN`) and Customer (`CUSTOMER`). Customers can activate an available plan from their portal, or an Admin can assign a plan. Activation is immediate; payment checkout and outbound email delivery are not included. Invoices are downloadable as server-generated PDFs and also have a browser print view.
 
 ## Quick start with Docker Compose
 
@@ -90,6 +90,7 @@ For production, replace every development password; set `APP_DEMO_SEED_ENABLED=f
 src/main/java/com/ritpl/billgen/   Spring Boot app (web, API, security, services, JPA)
 src/main/resources/db/migration/  Flyway schema and tenant migration
 src/main/resources/templates/     Responsive Thymeleaf pages and print view
+src/main/java/.../service/        InvoicePdfService renders snapshot-only PDFs
 src/main/resources/static/         Local CSS and JavaScript
 src/test/                          Unit tests
  gateway/                          Spring Cloud Gateway application

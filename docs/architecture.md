@@ -30,7 +30,7 @@ The Compose configuration has two independently running Spring Boot application 
 - **Services:** tenant scoping and ownership checks, invoice totals and lifecycle transitions, plan purchases and template entitlements, customer-owned product/category management.
 - **Spring Data JPA:** PostgreSQL persistence with Flyway-managed schema and Hibernate schema validation.
 - **REST API:** versioned JSON DTOs under `/api/v1`; endpoints derive tenant identity from the authenticated principal rather than trusting customer IDs supplied by the caller.
-- **Presentation:** local CSS/JavaScript, responsive customer/admin views and a browser-print invoice view with Classic, Modern and Minimal render layouts.
+- **Presentation:** local CSS/JavaScript, responsive customer/admin views, a browser-print invoice view with Classic, Modern and Minimal render layouts, and a server-side PDF renderer (OpenPDF) for the downloadable invoice.
 
 ## Roles and authorization
 
@@ -62,7 +62,7 @@ Flyway migration `V1__create_billgen_schema.sql` creates the original schema. `V
 
 An Admin creates templates, assigns one or more active templates to a plan, and controls plan/template availability. A customer chooses an active plan in its portal, or an Admin assigns one. Template access is computed from the current active subscription and that plan's active templates. The same check is enforced in the invoice service for both MVC and API requests, not just in the template selector. A customer cannot forge a template ID or submit another customer's account ID to create an invoice.
 
-Plan selection/renewal and subscription assignment activate immediately; there is no checkout or payment gateway. Deactivating a plan or bundled standard template removes it from customer selection and new invoice creation. Customers can also create plan-limited custom templates. Existing invoices keep company/logo and template presentation snapshots so profile/template edits do not alter historical print views.
+Plan selection/renewal and subscription assignment activate immediately; there is no checkout or payment gateway. Deactivating a plan or bundled standard template removes it from customer selection and new invoice creation. Customers can also create plan-limited custom templates. Existing invoices keep company/logo and template presentation snapshots so profile/template edits do not alter historical print views or downloads. `InvoicePdfService` renders only those snapshot columns, so `GET /portal/invoices/{id}/invoice.pdf` (owner) and `GET /invoices/{id}/invoice.pdf` (read-only Admin) reproduce the document as issued; each download is recorded as an `EXPORT` audit event.
 
 ## Tenant isolation
 
@@ -106,4 +106,4 @@ Product, invoice-report and audit XLSX exports reuse the corresponding tenant/ad
 
 ## Deliberate starter limitations
 
-The Customer account's company profile (including logo) is the invoice identity; there is no separate client list. The app immediately activates customer-selected plans but does not collect or reconcile payments. It does not send invoice email, generate PDFs on the server, split GST into CGST/SGST, apply exchange rates, or implement tax compliance. Invoice print can be saved as PDF through the browser. Review tax/legal requirements before production accounting use.
+The Customer account's company profile (including logo) is the invoice identity; there is no separate client list. The app immediately activates customer-selected plans but does not collect or reconcile payments. It does not send invoice email, split GST into CGST/SGST, apply exchange rates, or implement tax compliance. Invoice PDFs are generated from stored snapshots and the print view can also be saved as a PDF by the browser. Review tax/legal requirements before production accounting use.

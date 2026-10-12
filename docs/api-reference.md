@@ -58,6 +58,15 @@ Moves an owned invoice from `DRAFT` to `SENT`, `SENT` to `PAID`, or `DRAFT`/`SEN
 { "status": "PAID" }
 ```
 
+## Invoice PDF download
+
+`GET /portal/invoices/{id}/invoice.pdf` (owning account) and `GET /invoices/{id}/invoice.pdf` (read-only Admin view) return the invoice as a single-page PDF.
+
+* The tenant is resolved from the session; the record is loaded through the same tenant-scoped query as the invoice screen, so another account's id returns `404` rather than `403`.
+* Every value in the document - company name, contact, address, GSTIN, logo, template name/accent, line descriptions, quantities, unit prices, tax rates, subtotal, tax, discount, total and currency - is read from the invoice's stored snapshots, so a later profile, catalogue or template edit cannot change an issued document.
+* Each download writes an `EXPORT` audit event with the invoice number and the total that was handed out.
+* The response is `inline` with a filename derived from the server-generated invoice number and issue date, and `Cache-Control: no-store`.
+
 ## Products
 
 ### `GET /products`
