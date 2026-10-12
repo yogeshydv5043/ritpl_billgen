@@ -53,6 +53,18 @@ jobs:
       - name: Package application
         run: mvn -B -ntp -DskipTests package
 
+      - name: Summarise test results
+        if: always()
+        run: |
+          echo "### Test results" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          if [ -d target/surefire-reports ]; then
+            grep -h "Tests run" target/surefire-reports/*.txt >> "$GITHUB_STEP_SUMMARY" \
+              || echo "No Surefire summary files were produced." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No test reports were produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v4
