@@ -38,7 +38,6 @@ import com.ritpl.billgen.entity.InvoiceItem;
 public class InvoicePdfService {
 
     private static final DecimalFormat MONEY = new DecimalFormat("#,##0.00", DecimalFormatSymbols.getInstance(Locale.ROOT));
-    private static final Font TITLE = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 20);
     private static final Font HEADING = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11);
     private static final Font LABEL = FontFactory.getFont(FontFactory.HELVETICA, 8, Color.GRAY);
     private static final Font BODY = FontFactory.getFont(FontFactory.HELVETICA, 10);
@@ -90,7 +89,7 @@ public class InvoicePdfService {
 
         PdfPCell title = openCell(Element.ALIGN_RIGHT);
         title.addElement(paragraph("TAX INVOICE", LABEL));
-        title.addElement(paragraph(text(invoice.getInvoiceNumber(), "-"), TITLE, accent));
+        title.addElement(invoiceNumber(text(invoice.getInvoiceNumber(), "-"), accent));
         title.addElement(paragraph(invoice.getStatus().name() + "   ·   Template: "
                 + text(invoice.getTemplateName(), "default"), SMALL));
         title.addElement(paragraph("Issued " + invoice.getIssueDate() + "   ·   Due " + invoice.getDueDate(), SMALL));
@@ -144,11 +143,11 @@ public class InvoicePdfService {
         Font font = emphasise ? BODY_BOLD : BODY;
         PdfPCell left = new PdfPCell(new Phrase(label, font));
         left.setBorder(Rectangle.TOP + Rectangle.BOTTOM);
-        left.setBorderColor(accent);
+        left.setBorderColor(RULE);
         left.setPadding(5f);
         PdfPCell right = new PdfPCell(new Phrase(value, font));
         right.setBorder(Rectangle.TOP + Rectangle.BOTTOM);
-        right.setBorderColor(accent);
+        right.setBorderColor(RULE);
         right.setHorizontalAlignment(Element.ALIGN_RIGHT);
         right.setPadding(5f);
         if (emphasise) right.setBackgroundColor(HIGHLIGHT);
@@ -237,12 +236,16 @@ public class InvoicePdfService {
         }
     }
 
-    private Paragraph paragraph(String value, Font font) { return paragraph(value, font, null); }
-
-    private Paragraph paragraph(String value, Font font, Color color) {
-        Paragraph paragraph = new Paragraph(value, color == null ? font : new Font(font.getFamilyname(), font.getSize(),
-                font.getStyle(), color));
+    private Paragraph paragraph(String value, Font font) {
+        Paragraph paragraph = new Paragraph(value, font);
         paragraph.setLeading(font.getSize() + 3.4f);
+        return paragraph;
+    }
+
+    /** The stored template accent tints the invoice number; anything unparsable falls back to ink. */
+    private Paragraph invoiceNumber(String value, Color accent) {
+        Paragraph paragraph = new Paragraph(value, FontFactory.getFont(FontFactory.HELVETICA_BOLD, 20, Font.BOLD, accent));
+        paragraph.setLeading(24f);
         return paragraph;
     }
 
