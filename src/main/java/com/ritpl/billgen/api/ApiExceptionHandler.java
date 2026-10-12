@@ -5,6 +5,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -12,9 +13,14 @@ import com.ritpl.billgen.service.ResourceNotFoundException;
 
 @RestControllerAdvice(basePackages = "com.ritpl.billgen.api")
 public class ApiExceptionHandler {
+    /** A record owned by another customer account is reported as missing, never as forbidden. */
     @ExceptionHandler(ResourceNotFoundException.class)
     ResponseEntity<ProblemDetail> notFound(ResourceNotFoundException ex) {
         return response(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ProblemDetail> forbidden(AccessDeniedException ex) {
+        return response(HttpStatus.FORBIDDEN, ex.getMessage());
     }
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<ProblemDetail> badRequest(IllegalArgumentException ex) {
@@ -22,7 +28,8 @@ public class ApiExceptionHandler {
     }
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ProblemDetail> invalid(MethodArgumentNotValidException ex) {
-        String detail = ex.getBindingResult().getFieldErrors().stream().map(e -> e.getField() + ": " + e.getDefaultMessage()).distinct().collect(Collectors.joining("; "));
+        String detail = ex.getBindingResult().getFieldErrors().stream()
+                .map(e -> e.getField() + ": " + e.getDefaultMessage()).distinct().collect(Collectors.joining("; "));
         return response(HttpStatus.BAD_REQUEST, detail.isBlank() ? "Request validation failed." : detail);
     }
     @ExceptionHandler(DataIntegrityViolationException.class)

@@ -1,25 +1,28 @@
 package com.ritpl.billgen.web;
 
-import java.util.List;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import com.ritpl.billgen.entity.Invoice;
-import com.ritpl.billgen.service.CustomerService;
+import com.ritpl.billgen.service.AccountStatsService;
 import com.ritpl.billgen.service.InvoiceService;
 
+/** Administrator overview, including the customer-wise statistics table. */
 @Controller
 @RequestMapping("/dashboard")
 public class DashboardController {
     private final InvoiceService invoices;
-    private final CustomerService customers;
-    public DashboardController(InvoiceService invoices,CustomerService customers){this.invoices=invoices;this.customers=customers;}
-    @GetMapping public String dashboard(Model model){
-        List<Invoice> recent=invoices.findRecent();
-        model.addAttribute("stats",invoices.dashboardStats());
-        model.addAttribute("recentInvoices",recent.stream().limit(7).toList());
-        model.addAttribute("customers",customers.findAll(null).stream().limit(5).toList());
+    private final AccountStatsService accountStats;
+
+    public DashboardController(InvoiceService invoices, AccountStatsService accountStats) {
+        this.invoices = invoices; this.accountStats = accountStats;
+    }
+
+    @GetMapping
+    public String dashboard(Model model) {
+        model.addAttribute("stats", invoices.dashboardStats(com.ritpl.billgen.security.TenantScope.administrator()));
+        model.addAttribute("recentInvoices", invoices.findRecent(com.ritpl.billgen.security.TenantScope.administrator()));
+        model.addAttribute("accountStats", accountStats.findAll(com.ritpl.billgen.security.TenantScope.administrator(), null));
         return "dashboard";
     }
 }

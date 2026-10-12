@@ -28,6 +28,9 @@ public class Customer {
     @Column(name = "postal_code", length = 24) private String postalCode;
     @Column(nullable = false, length = 80) private String country = "India";
     @Column(length = 24) private String gstin;
+    /** Internal migration-owned account used for records created before tenant isolation existed. */
+    @Column(name = "system_account", nullable = false)
+    private boolean systemAccount = false;
     @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
 
     protected Customer() { }

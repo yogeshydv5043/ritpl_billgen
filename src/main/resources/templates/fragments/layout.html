@@ -10,19 +10,31 @@
 </head>
 <body>
 <aside th:fragment="sidebar" class="sidebar" id="sidebar" aria-label="Primary navigation">
-    <a class="brand" th:href="@{/dashboard}" aria-label="BillGen home">
+    <a class="brand" th:href="@{/dashboard}" sec:authorize="hasRole('ADMIN')" aria-label="BillGen home">
+        <span class="brand-mark">b<span>.</span></span>
+        <span class="brand-copy"><strong>billgen</strong><small>INVOICE STUDIO</small></span>
+    </a>
+    <a class="brand" th:href="@{/portal}" sec:authorize="hasRole('CUSTOMER')" aria-label="BillGen home">
         <span class="brand-mark">b<span>.</span></span>
         <span class="brand-copy"><strong>billgen</strong><small>INVOICE STUDIO</small></span>
     </a>
     <button class="sidebar-close" type="button" aria-label="Close navigation" onclick="BillGen.toggleNav(false)">×</button>
-    <div class="nav-label">WORKSPACE</div>
-    <nav class="nav-links">
-        <a th:href="@{/dashboard}" sec:authorize="hasAnyRole('ADMIN','FINANCE')"><span class="nav-icon">⌂</span><span>Overview</span></a>
-        <a th:href="@{/invoices}" sec:authorize="hasAnyRole('ADMIN','FINANCE')"><span class="nav-icon">▤</span><span>Invoices</span></a>
-        <a th:href="@{/customers}" sec:authorize="hasAnyRole('ADMIN','FINANCE')"><span class="nav-icon">♙</span><span>Customers</span></a>
-        <a th:href="@{/products}" sec:authorize="hasAnyRole('ADMIN','FINANCE')"><span class="nav-icon">◇</span><span>Catalogue</span></a>
-        <a th:href="@{/admin/plans}" sec:authorize="hasRole('ADMIN')"><span class="nav-icon">✳</span><span>Plans</span></a>
-        <a th:href="@{/portal}" sec:authorize="hasRole('CUSTOMER')"><span class="nav-icon">▣</span><span>My invoices</span></a>
+    <div class="nav-label" sec:authorize="hasRole('ADMIN')">ADMINISTRATION</div>
+    <nav class="nav-links" sec:authorize="hasRole('ADMIN')">
+        <a th:href="@{/dashboard}"><span class="nav-icon">⌂</span><span>Overview</span></a>
+        <a th:href="@{/customers}"><span class="nav-icon">♙</span><span>Customers</span></a>
+        <a th:href="@{/invoices}"><span class="nav-icon">▤</span><span>All invoices</span></a>
+        <a th:href="@{/products}"><span class="nav-icon">◇</span><span>All catalogues</span></a>
+        <a th:href="@{/admin/templates}"><span class="nav-icon">▧</span><span>Templates</span></a>
+        <a th:href="@{/admin/plans}"><span class="nav-icon">✳</span><span>Plans</span></a>
+    </nav>
+    <div class="nav-label" sec:authorize="hasRole('CUSTOMER')">MY ACCOUNT</div>
+    <nav class="nav-links" sec:authorize="hasRole('CUSTOMER')">
+        <a th:href="@{/portal}"><span class="nav-icon">⌂</span><span>Home</span></a>
+        <a th:href="@{/portal/invoices}"><span class="nav-icon">▤</span><span>My invoices</span></a>
+        <a th:href="@{/portal/products}"><span class="nav-icon">◇</span><span>My products</span></a>
+        <a th:href="@{/portal/categories}"><span class="nav-icon">▤</span><span>Categories</span></a>
+        <a th:href="@{/portal/plan}"><span class="nav-icon">✳</span><span>My plan</span></a>
     </nav>
     <div class="sidebar-spacer"></div>
     <a class="sidebar-help" th:href="@{/plans}">
@@ -32,9 +44,10 @@
 </aside>
 <header th:fragment="topbar" class="topbar">
     <button class="mobile-menu" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" onclick="BillGen.toggleNav()"><span></span><span></span></button>
-    <div class="topbar-context"><span class="eyebrow">BILLING WORKSPACE</span><span class="topbar-date">A clearer view of your cash flow</span></div>
+    <div class="topbar-context"><span class="eyebrow" sec:authorize="hasRole('ADMIN')">ADMIN CONSOLE</span><span class="eyebrow" sec:authorize="hasRole('CUSTOMER')">BILLING WORKSPACE</span><span class="topbar-date">Your account, your data, your templates</span></div>
     <div class="topbar-actions">
-        <a class="topbar-shortcut" th:href="@{/invoices/new}" sec:authorize="hasAnyRole('ADMIN','FINANCE')"><span>＋</span> New invoice</a>
+        <a class="topbar-shortcut" th:href="@{/customers/new}" sec:authorize="hasRole('ADMIN')"><span>＋</span> New account</a>
+        <a class="topbar-shortcut" th:href="@{/portal/invoices/new}" sec:authorize="hasRole('CUSTOMER')"><span>＋</span> New invoice</a>
         <span class="topbar-separator"></span>
         <div class="user-chip"><span class="user-avatar" th:text="${#strings.substring(#authentication.name,0,1).toUpperCase()}">B</span><span class="user-email" sec:authentication="name">user@example.com</span></div>
         <form th:action="@{/logout}" method="post"><button class="logout-button" type="submit" title="Sign out" aria-label="Sign out">↗</button></form>

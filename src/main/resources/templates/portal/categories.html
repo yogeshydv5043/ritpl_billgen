@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Product categories')}"></head>
+<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content">
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <section class="page-title-row"><div><span class="kicker">YOUR ACCOUNT-OWNED CATEGORIES</span><h1>Product categories</h1><p class="page-lede">Categories are private to your account. Deleting a category keeps its products and unassigns them.</p></div><a class="button button-secondary" th:href="@{/portal/products}">My products <span>→</span></a></section>
+
+    <div class="category-layout">
+        <section class="panel form-panel category-create-panel">
+            <div class="form-intro"><span class="form-step">＋</span><div><h2>Add a category</h2><p>Keep your products organised.</p></div></div>
+            <form th:action="@{/portal/categories}" th:object="${categoryForm}" method="post" novalidate>
+                <div class="field"><label for="category-name">Category name <span class="required">*</span></label><input id="category-name" th:field="*{name}" placeholder="e.g. Professional services"><small class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></small></div>
+                <div class="field"><label for="category-description">Description</label><textarea id="category-description" rows="3" th:field="*{description}" placeholder="Optional note"></textarea><small class="field-error" th:if="${#fields.hasErrors('description')}" th:errors="*{description}"></small></div>
+                <div class="form-actions"><button class="button button-primary" type="submit">Add category <span>→</span></button></div>
+            </form>
+        </section>
+
+        <section class="panel list-panel category-list-panel">
+            <div class="panel-heading"><div><span class="kicker">YOUR CATEGORIES</span><h2>Manage categories <span class="heading-count" th:text="${#lists.size(categories)}">0</span></h2></div></div>
+            <div class="category-management-list">
+                <article class="category-management-row" th:each="category : ${categories}">
+                    <form class="category-edit-form" th:action="@{/portal/categories/{id}(id=${category.id})}" method="post">
+                        <div class="field"><label th:for="${'category-name-' + category.id}">Category name</label><input th:id="${'category-name-' + category.id}" name="name" maxlength="120" required th:value="${category.name}"></div>
+                        <div class="field"><label th:for="${'category-description-' + category.id}">Description</label><input th:id="${'category-description-' + category.id}" name="description" maxlength="300" th:value="${category.description}"></div>
+                        <div class="category-row-actions"><span class="category-usage" th:text="${productCounts[category.id] != null ? productCounts[category.id] + ' products' : '0 products'}">0 products</span><button class="button button-secondary button-small" type="submit">Save</button></div>
+                    </form>
+                    <form th:action="@{/portal/categories/{id}/delete(id=${category.id})}" method="post" onsubmit="return confirm('Delete this category? Its products will stay in your catalogue.')"><button class="row-arrow row-danger" type="submit" aria-label="Delete category">×</button></form>
+                </article>
+                <div class="empty-state" th:if="${#lists.isEmpty(categories)}"><span class="empty-icon">▧</span><h2>Make products easier to find.</h2><p>Add a category, then assign it to your products.</p></div>
+            </div>
+        </section>
+    </div>
+    <footer class="page-footer"><span>Your categories are never shared with another customer.</span><a th:href="@{/portal}">Back to my workspace ↗</a></footer>
+</div></main></div></body></html>

@@ -39,7 +39,9 @@ public class AppUser {
     @PrePersist void onCreate() { if (createdAt == null) createdAt = LocalDateTime.now(); }
     public Long getId() { return id; }
     public String getEmail() { return email; }
+    public void setEmail(String v) { email = v == null ? null : v.trim().toLowerCase(java.util.Locale.ROOT); }
     public String getPasswordHash() { return passwordHash; }
+    public void setPasswordHash(String v) { passwordHash = v; }
     public UserRole getRole() { return role; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean v) { enabled = v; }
