@@ -42,7 +42,10 @@ public class Invoice {
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 16)
     private InvoiceStatus status = InvoiceStatus.DRAFT;
     @Column(nullable = false, length = 3) private String currency = "INR";
-    @Column(name = "template_code", nullable = false, length = 20) private String templateCode = "CLASSIC";
+    /** Template snapshot for this invoice. Access is checked against the customer's current plan on creation. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "template_id", nullable = false)
+    private BillTemplate template;
     @Column(length = 1200) private String notes;
     @Column(nullable = false, precision = 14, scale = 2) private BigDecimal subtotal = BigDecimal.ZERO;
     @Column(name = "tax_amount", nullable = false, precision = 14, scale = 2) private BigDecimal taxAmount = BigDecimal.ZERO;
@@ -54,7 +57,11 @@ public class Invoice {
     @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
 
     public Invoice() { }
-    public void addItem(InvoiceItem item) { items.add(item); item.setInvoice(this); }
+    public void addItem(InvoiceItem item) {
+        items.add(item);
+        item.setInvoice(this);
+        item.setCustomer(customer);
+    }
     @PrePersist void onCreate() { LocalDateTime n = LocalDateTime.now(); createdAt = n; updatedAt = n; }
     @PreUpdate void onUpdate() { updatedAt = LocalDateTime.now(); }
     public boolean isOverdue(LocalDate day) { return status == InvoiceStatus.SENT && dueDate.isBefore(day); }
@@ -62,7 +69,10 @@ public class Invoice {
     public String getInvoiceNumber() { return invoiceNumber; }
     public void setInvoiceNumber(String v) { invoiceNumber = v; }
     public Customer getCustomer() { return customer; }
-    public void setCustomer(Customer v) { customer = v; }
+    public void setCustomer(Customer v) {
+        customer = v;
+        for (InvoiceItem item : items) item.setCustomer(v);
+    }
     public LocalDate getIssueDate() { return issueDate; }
     public void setIssueDate(LocalDate v) { issueDate = v; }
     public LocalDate getDueDate() { return dueDate; }
@@ -71,8 +81,11 @@ public class Invoice {
     public void setStatus(InvoiceStatus v) { status = v; }
     public String getCurrency() { return currency; }
     public void setCurrency(String v) { currency = v; }
-    public String getTemplateCode() { return templateCode; }
-    public void setTemplateCode(String v) { templateCode = v; }
+    public BillTemplate getTemplate() { return template; }
+    public void setTemplate(BillTemplate v) { template = v; }
+    public String getTemplateCode() { return template == null ? null : template.getCode(); }
+    public String getTemplateName() { return template == null ? null : template.getName(); }
+    public String getTemplateCssClass() { return template == null ? BillTemplateStyle.CLASSIC.getCssClass() : template.getStyleCssClass(); }
     public String getNotes() { return notes; }
     public void setNotes(String v) { notes = v; }
     public BigDecimal getSubtotal() { return subtotal; }

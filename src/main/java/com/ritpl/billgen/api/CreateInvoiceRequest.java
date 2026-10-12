@@ -12,13 +12,19 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-public record CreateInvoiceRequest(@NotNull Long customerId,
+public record CreateInvoiceRequest(
+        /** Ignored for customer credentials: the invoice always belongs to the calling account. */
+        Long customerId,
         @NotNull @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate issueDate,
         @NotNull @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate dueDate,
         @Size(max=1200) String notes,
         @Pattern(regexp="[A-Za-z]{3}") String currency,
-        @Pattern(regexp="CLASSIC|MODERN|MINIMAL") String templateCode,
+        /** Must be a template included in the plan the account purchased. */
+        @NotNull Long templateId,
         @NotNull InvoiceStatus initialStatus,
         @Valid @NotEmpty @Size(max=30) List<InvoiceLineRequest> lines) {
-    public CreateInvoiceCommand toCommand(){return new CreateInvoiceCommand(customerId,issueDate,dueDate,notes,currency,templateCode,lines.stream().map(InvoiceLineRequest::toInput).collect(Collectors.toList()),initialStatus);}
+    public CreateInvoiceCommand toCommand(){
+        return new CreateInvoiceCommand(customerId, issueDate, dueDate, notes, currency, templateId,
+                lines.stream().map(InvoiceLineRequest::toInput).collect(Collectors.toList()), initialStatus);
+    }
 }

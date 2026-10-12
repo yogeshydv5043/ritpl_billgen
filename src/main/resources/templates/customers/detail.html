@@ -4,14 +4,55 @@
 <body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
 <main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content">
     <div th:replace="~{fragments/layout :: flash}"></div>
-    <div class="breadcrumb"><a th:href="@{/customers}">Customers</a><span>/</span><span th:text="${customer.companyName}">Customer</span></div>
-    <section class="customer-profile-head"><div class="profile-identity"><span class="profile-avatar" th:text="${#strings.substring(customer.companyName,0,1).toUpperCase()}">N</span><div><span class="kicker">CUSTOMER ON FILE SINCE <span th:text="${customer.createdAt.toLocalDate()}">2026-01-01</span></span><h1 th:text="${customer.companyName}">Northstar Studio</h1><p th:text="${customer.contactName + ' · ' + customer.email}">Maya Kapoor · hello@company.com</p></div></div><div class="profile-actions"><a class="button button-secondary" th:href="@{/customers/{id}/edit(id=${customer.id})}">Edit details</a><a class="button button-primary" th:href="@{/invoices/new}">＋ New invoice</a></div></section>
-    <section class="profile-grid"><article class="panel profile-card"><div class="panel-heading"><div><span class="kicker">ON FILE</span><h2>Billing details</h2></div><span class="profile-small-icon">⌂</span></div><dl class="details-list"><div><dt>Contact</dt><dd th:text="${customer.contactName}">Maya Kapoor</dd></div><div><dt>Email</dt><dd><a th:href="|mailto:${customer.email}|" th:text="${customer.email}">hello@company.com</a></dd></div><div><dt>Phone</dt><dd th:text="${customer.phone != null ? customer.phone : 'Not added'}">Not added</dd></div><div><dt>Address</dt><dd th:text="${#strings.isEmpty(customer.fullAddress) ? 'Not added' : customer.fullAddress}">Not added</dd></div><div><dt>GSTIN</dt><dd class="gst-number" th:text="${customer.gstin != null ? customer.gstin : 'Not added'}">Not added</dd></div></dl></article>
-        <article class="panel profile-invoices"><div class="panel-heading"><div><span class="kicker">BILLING HISTORY</span><h2>Invoices <span class="heading-count" th:text="${#lists.size(invoices)}">0</span></h2></div><a class="text-link" th:href="@{/invoices/new}">Create invoice <span>→</span></a></div>
-            <div class="table-wrap"><table class="data-table"><thead><tr><th>INVOICE</th><th>ISSUED</th><th>DUE</th><th>AMOUNT</th><th>STATUS</th><th></th></tr></thead><tbody>
-                <tr th:each="invoice : ${invoices}"><td><a class="table-primary" th:href="@{/invoices/{id}(id=${invoice.id})}" th:text="${invoice.invoiceNumber}">INV-001001</a></td><td th:text="${invoice.issueDate}">2026-01-01</td><td th:text="${invoice.dueDate}">2026-01-15</td><td class="table-amount"><span th:text="${invoice.currency}">INR</span> <span th:text="${#numbers.formatDecimal(invoice.totalAmount,1,'COMMA',2,'POINT')}">0.00</span></td><td><span class="status-pill" th:classappend="| status-${#strings.toLowerCase(invoice.status.name())}|" th:text="${invoice.status}">SENT</span></td><td><a class="row-arrow" th:href="@{/invoices/{id}(id=${invoice.id})}" aria-label="Open invoice">↗</a></td></tr>
-                <tr th:if="${#lists.isEmpty(invoices)}"><td colspan="6"><div class="empty-inline"><span class="empty-icon">▤</span><strong>Nothing billed to this customer yet.</strong><span>The first invoice can be ready in minutes.</span></div></td></tr>
+    <div class="breadcrumb"><a th:href="@{/customers}">Customer accounts</a><span>/</span><span th:text="${customer.companyName}">Customer</span></div>
+    <section class="customer-profile-head"><div class="profile-identity"><span class="profile-avatar" th:text="${#strings.substring(customer.companyName,0,1).toUpperCase()}">N</span><div><span class="kicker">CUSTOMER ACCOUNT SINCE <span th:text="${customer.createdAt.toLocalDate()}">2026-01-01</span></span><h1 th:text="${customer.companyName}">Northstar Studio</h1><p th:text="${customer.contactName + ' · ' + customer.email}">Maya Kapoor · hello@company.com</p></div></div><div class="profile-actions"><a class="button button-secondary" th:href="@{/customers/{id}/edit(id=${customer.id})}">Edit details</a><form th:action="@{/customers/{id}/login/toggle(id=${customer.id})}" method="post"><button class="button button-quiet" type="submit" th:text="${stats.loginEnabled ? 'Disable login' : 'Enable login'}">Disable login</button></form></div></section>
+
+    <section class="invoice-summary-strip"><div><span class="summary-icon summary-icon-purple">▤</span><span><small>INVOICES GENERATED</small><strong th:text="${stats.invoiceCount}">0</strong></span></div><div><span class="summary-icon summary-icon-blue">◇</span><span><small>ACTIVE PRODUCTS</small><strong th:text="${stats.productCount}">0</strong></span></div><div><span class="summary-icon summary-icon-green">▤</span><span><small>CATEGORIES</small><strong th:text="${stats.categoryCount}">0</strong></span></div></section>
+
+    <section class="profile-grid">
+        <article class="panel profile-card">
+            <div class="panel-heading"><div><span class="kicker">PURCHASED PLAN</span><h2>Subscription</h2></div><span class="profile-small-icon">✳</span></div>
+            <dl class="details-list">
+                <div><dt>Plan</dt><dd th:text="${stats.hasPlan() ? stats.planName : 'No plan'}">Growth</dd></div>
+                <div><dt>Plan code</dt><dd th:text="${stats.hasPlan() ? stats.planCode : '—'}">GROWTH</dd></div>
+                <div><dt>Status</dt><dd th:text="${stats.subscriptionStatus}">Active</dd></div>
+                <div><dt>Started</dt><dd th:text="${stats.subscriptionStart != null ? stats.subscriptionStart : '—'}">2026-01-01</dd></div>
+                <div th:if="${stats.subscriptionEnd != null}"><dt>Ends</dt><dd th:text="${stats.subscriptionEnd}">2027-01-01</dd></div>
+                <div><dt>Login</dt><dd><span th:text="${stats.loginEmail != null ? stats.loginEmail : 'Not set'}">login@company.com</span><span th:if="${stats.loginEmail != null and !stats.loginEnabled}"> · disabled</span></dd></div>
+                <div><dt>Total billed</dt><dd th:text="${#numbers.formatDecimal(stats.totalBilled,1,'COMMA',2,'POINT')}">0.00</dd></div>
+            </dl>
+            <form class="stack-form" th:action="@{/customers/{id}/plan(id=${customer.id})}" method="post">
+                <div class="field"><label for="planId">Assign a plan</label><select id="planId" name="planId" th:disabled="${#lists.isEmpty(plans)}">
+                    <option th:each="plan : ${plans}" th:value="${plan.id}" th:selected="${plan.id == stats.planId}" th:text="${plan.name + ' · ' + plan.currency + ' ' + #numbers.formatDecimal(plan.monthlyPrice,1,'COMMA',2,'POINT') + '/mo'}">Growth</option>
+                </select><small class="field-help">Assigning a plan immediately unlocks the templates bundled with it.</small></div>
+                <div class="form-actions"><button class="button button-primary button-small" type="submit" th:disabled="${#lists.isEmpty(plans)}">Assign plan</button></div>
+            </form>
+            <form th:if="${stats.hasPlan()}" th:action="@{/customers/{id}/plan/cancel(id=${customer.id})}" method="post"><button class="button button-quiet button-small" type="submit">Cancel plan and withdraw templates</button></form>
+            <div th:if="${!#lists.isEmpty(subscriptionHistory)}" class="plan-admin-limits"><span th:each="entry : ${subscriptionHistory}"><strong th:text="${entry.plan.name}">Growth</strong> · <span th:text="${entry.status}">ACTIVE</span> · <span th:text="${entry.startedOn}">2026-01-01</span></span></div>
+        </article>
+
+        <article class="panel profile-invoices">
+            <div class="panel-heading"><div><span class="kicker">BILLING HISTORY</span><h2>Invoices <span class="heading-count" th:text="${#lists.size(invoices)}">0</span></h2></div><a class="text-link" th:href="@{/invoices(customerId=${customer.id})}">Filtered view <span>→</span></a></div>
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>INVOICE</th><th>TEMPLATE</th><th>ISSUED</th><th>DUE</th><th>AMOUNT</th><th>STATUS</th><th></th></tr></thead><tbody>
+                <tr th:each="invoice : ${invoices}"><td><a class="table-primary" th:href="@{/invoices/{id}(id=${invoice.id})}" th:text="${invoice.invoiceNumber}">INV-001001</a></td><td th:text="${invoice.templateName}">Classic</td><td th:text="${invoice.issueDate}">2026-01-01</td><td th:text="${invoice.dueDate}">2026-01-15</td><td class="table-amount"><span th:text="${invoice.currency}">INR</span> <span th:text="${#numbers.formatDecimal(invoice.totalAmount,1,'COMMA',2,'POINT')}">0.00</span></td><td><span class="status-pill" th:classappend="| status-${#strings.toLowerCase(invoice.status.name())}|" th:text="${invoice.status}">SENT</span></td><td><a class="row-arrow" th:href="@{/invoices/{id}(id=${invoice.id})}" aria-label="Open invoice">↗</a></td></tr>
+                <tr th:if="${#lists.isEmpty(invoices)}"><td colspan="7"><div class="empty-inline"><span class="empty-icon">▤</span><strong>No invoices generated by this account yet.</strong><span>Customers create invoices from their own portal.</span></div></td></tr>
             </tbody></table></div>
-        </article></section>
-    <footer class="page-footer"><span>Every good project begins with a good conversation.</span><a th:href="@{/customers}">Back to customers ↗</a></footer>
+        </article>
+    </section>
+
+    <section class="profile-grid">
+        <article class="panel profile-invoices">
+            <div class="panel-heading"><div><span class="kicker">OWNED BY THIS ACCOUNT</span><h2>Products <span class="heading-count" th:text="${#lists.size(products)}">0</span></h2></div></div>
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>ITEM</th><th>TYPE</th><th>CATEGORY</th><th>PRICE</th><th>STATUS</th></tr></thead><tbody>
+                <tr th:each="product : ${products}"><td><span class="table-primary" th:text="${product.name}">Consulting</span><span class="table-secondary" th:text="${product.sku}">SVC-1</span></td><td th:text="${product.productType.displayName}">Service</td><td th:text="${product.categoryName != null ? product.categoryName : '—'}">Services</td><td class="table-amount"><span th:text="${#numbers.formatDecimal(product.unitPrice,1,'COMMA',2,'POINT')}">0.00</span></td><td><span class="status-pill" th:classappend="${product.active ? ' status-paid' : ' status-draft'}" th:text="${product.active ? 'ACTIVE' : 'HIDDEN'}">ACTIVE</span></td></tr>
+                <tr th:if="${#lists.isEmpty(products)}"><td colspan="5"><div class="empty-inline">No products yet.</div></td></tr>
+            </tbody></table></div>
+        </article>
+        <article class="panel profile-card">
+            <div class="panel-heading"><div><span class="kicker">OWNED BY THIS ACCOUNT</span><h2>Categories</h2></div></div>
+            <dl class="details-list"><div th:each="category : ${categories}"><dt th:text="${category.name}">Software</dt><dd th:text="${category.description != null ? category.description : '—'}">—</dd></div>
+                <div th:if="${#lists.isEmpty(categories)}"><dt>—</dt><dd>No categories yet.</dd></div></dl>
+        </article>
+    </section>
+    <footer class="page-footer"><span>Customer records are read-only here; the account manages its own data.</span><a th:href="@{/customers}">Back to accounts ↗</a></footer>
 </div></main></div></body></html>

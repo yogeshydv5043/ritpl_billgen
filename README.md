@@ -1,8 +1,8 @@
 # BillGen
 
-BillGen is a responsive billing and invoice workspace built with Java 17, Spring Boot, PostgreSQL, Redis, Spring Security and Thymeleaf. It includes invoice creation and print-ready templates, customer records, a product/service catalogue, subscription-plan pages, an authenticated REST API, a Spring Cloud API gateway, and an Nginx reverse proxy/load balancer.
+BillGen is a multi-tenant billing and invoice workspace built with Java 17, Spring Boot, PostgreSQL, Redis, Spring Security and Thymeleaf. It includes customer account isolation, customer-owned products and categories, admin-managed invoice templates and plans, plan-based template entitlements, invoice creation and print-ready views, an authenticated REST API, a Spring Cloud API gateway, and an Nginx reverse proxy/load balancer.
 
-> **Project status:** this repository was reconstructed as a complete starter application. The billing workflow, catalogue, plans, demo data, API, gateway, Docker Compose stack and Nginx configuration are included. Subscription checkout/entitlement enforcement, outbound email delivery, and server-side PDF generation are intentionally not included.
+> **Project status:** the application enforces customer data isolation and plan/template entitlements. Customers can activate an available plan from their portal, or an Admin can assign a plan. Activation is immediate; payment checkout, outbound email delivery and server-side PDF generation are not included. Invoice print views can be saved as PDF in the browser.
 
 ## Quick start with Docker Compose
 
@@ -18,13 +18,13 @@ Open **http://localhost:8080**. Compose starts PostgreSQL, Redis, two BillGen ap
 
 The development seed creates these accounts when demo data is enabled:
 
-| Role | Email |
-|---|---|
-| Administrator | `admin@billgen.local` |
-| Finance | `finance@billgen.local` |
-| Customer portal | `customer@demo.local` |
+| Role | Email | Seeded plan |
+|---|---|---|
+| Admin | `admin@billgen.local` | — |
+| Customer | `customer@demo.local` | Starter |
+| Customer | `customer2@demo.local` | Growth |
 
-The password for all seeded demo accounts is the `DEMO_PASSWORD` value in `.env` (default in `.env.example`: `ChangeMe123!`). **Change it before sharing a development environment.** The seed also creates sample customers, invoices, products/services and plans. Seeding is idempotent and only adds missing sample records.
+The password for all seeded demo accounts is the `DEMO_PASSWORD` value in `.env` (default in `.env.example`: `ChangeMe123!`). **Change it before sharing a development environment.** The seed also creates isolated products, categories and invoices for each account. Seeding is idempotent and only adds missing sample records. Existing `FINANCE` users are promoted to `ADMIN` by the migration so that the application has exactly two roles.
 
 Useful commands:
 
@@ -42,38 +42,32 @@ docker compose down
 Requirements: JDK 17+, Maven 3.9+, PostgreSQL and Redis.
 
 1. Create a PostgreSQL database/user and start Redis.
-2. Copy `.env.example` to `.env`. Spring Boot now reads that local file when run from the project directory; by default it expects PostgreSQL user `billgen` with password `billgen_dev_only`. Set `POSTGRES_PASSWORD` in `.env` to the password already assigned to your local `billgen` role, or set `SPRING_DATASOURCE_PASSWORD` in your shell to override it.
+2. Copy `.env.example` to `.env`. Spring Boot reads that local file when run from the project directory; by default it expects PostgreSQL user `billgen` with password `billgen_dev_only`. Set `POSTGRES_PASSWORD` in `.env` to the password already assigned to your local `billgen` role, or set `SPRING_DATASOURCE_PASSWORD` in your shell to override it.
 3. Activate the dev profile and run the web application:
 
    ```bash
-   # macOS / Linux
    export SPRING_PROFILES_ACTIVE=dev
-   mvn spring-boot:run
-   ```
-
-   ```powershell
-   # Windows PowerShell
-   $env:SPRING_PROFILES_ACTIVE = "dev"
    mvn spring-boot:run
    ```
 
 4. Open <http://localhost:8080>.
 
-The development profile defaults to `jdbc:postgresql://localhost:5432/billgen`, PostgreSQL user `billgen` / password `billgen_dev_only`, Redis at `localhost:6379`, and demo seeding enabled. Override these with matching PostgreSQL role credentials if your local database was initialized differently. If startup reports SQL state `28P01`, follow the [database authentication troubleshooting steps](docs/setup.md#troubleshooting-postgresql-password-authentication) to align the app setting and role password. Flyway creates the schema on first startup. Hibernate validates the schema; it does not create or update tables.
+The development profile defaults to `jdbc:postgresql://localhost:5432/billgen`, PostgreSQL user `billgen` / password `billgen_dev_only`, Redis at `localhost:6379`, and demo seeding enabled. Override these with matching PostgreSQL role credentials if your local database was initialized differently. If startup reports SQL state `28P01`, follow the [database authentication troubleshooting steps](docs/setup.md#troubleshooting-postgresql-password-authentication) to align the app setting and role password. Flyway applies schema migrations on first startup. Hibernate validates the schema; it does not create or update tables.
 
 To run the gateway separately, build and start the `gateway/` Maven project after starting BillGen. Set `BILLGEN_A_URI` and `BILLGEN_B_URI` to reachable application instances. For the complete reverse-proxy/load-balancer setup, use Docker Compose.
 
 ## Roles and features
 
-- **Admin:** dashboard, customers, invoices, products/services, subscription-plan administration.
-- **Finance:** dashboard, customers, invoices, products/services.
-- **Customer:** a read-only portal for their own invoices and print view.
-- **Invoices:** multiple line items, quantity, unit price, line-level tax, due dates, draft/sent/paid states, customer notes, currency code and three designs: Classic, Modern and Minimal. Browser print can save the print view as PDF.
-- **Catalogue:** reusable product and service items, tax rate, category, active/hidden state.
-- **Plans:** public pricing page and admin-managed plan catalogue.
-- **Caching:** Redis caches active catalogue items and plans plus dashboard metrics (180-second default TTL); writes evict related caches.
+- **Admin:** customer account provisioning, plan and template management, cross-account read-only data access, invoice/product/category statistics and subscription management.
+- **Customer:** private workspace for its own invoices, products and categories; can activate an available plan and generate invoices using only active templates included in that plan.
+- **Templates and plans:** Admins create templates, assign multiple templates to a plan, and control availability. A customer subscription grants template access; hiding a template or cancelling the plan immediately withdraws that access.
+- **Invoices:** multiple line items, quantity, unit price, line-level tax, due dates, draft/sent/paid states, currency and notes. The customer account is derived from the authenticated session, and the chosen template is validated on the server.
+- **Product catalogue:** products/services and product categories are owned by one customer account. SKUs are unique within an account; categories may have the same name across accounts.
+- **Data isolation:** all customer-owned rows carry a tenant/customer id, including invoice line items (whose tenant must match their parent invoice). Customer repository queries are scoped to the session account, foreign IDs return `404`, and customer create/update/delete operations validate ownership in the backend. Admin access to customer data is read-only.
+- **Admin dashboard:** customer-wise invoice totals/counts, active products, categories, account details and purchased plans.
+- **Caching:** Redis caches active plans and dashboard metrics (180-second default TTL); administrative and customer writes evict affected entries.
 - **Sessions:** Spring Session stores web sessions in Redis so either application instance can serve a signed-in user.
-- **API:** versioned JSON endpoints under `/api/v1`, protected by HTTP Basic for Admin/Finance; see [API reference](docs/api-reference.md).
+- **API:** versioned JSON endpoints under `/api/v1`, protected by HTTP Basic for Admin and Customer accounts with the same tenant checks as the web UI; see [API reference](docs/api-reference.md).
 
 ## Configuration
 
@@ -90,7 +84,7 @@ For production, replace every development password; set `APP_DEMO_SEED_ENABLED=f
 
 ```text
 src/main/java/com/ritpl/billgen/   Spring Boot app (web, API, security, services, JPA)
-src/main/resources/db/migration/  Flyway schema
+src/main/resources/db/migration/  Flyway schema and tenant migration
 src/main/resources/templates/     Responsive Thymeleaf pages and print view
 src/main/resources/static/         Local CSS and JavaScript
 src/test/                          Unit tests

@@ -1,40 +1,37 @@
 # BillGen REST API v1
 
-Base path: `/api/v1`. JSON endpoints are protected with HTTP Basic authentication for `ADMIN` and `FINANCE` users. Call them through the Nginx entry point (local default `http://localhost:8080`); `/api/**` passes through the Spring Cloud Gateway and load balancer. Use HTTPS in production. Customer-role credentials cannot call the management API.
+Base path: `/api/v1`. API endpoints use HTTP Basic and are available to authenticated `ADMIN` and `CUSTOMER` roles. Use HTTPS in production. Every request derives its tenant scope from the authenticated account; a Customer cannot select another customer ID to gain access to its records. Admins may read across all accounts, but customer-owned records are read-only to Admin.
+
+Call the API through the public Nginx endpoint (local default `http://localhost:8080`); `/api/**` passes through the Spring Cloud Gateway and load balancer.
 
 ```bash
-curl -u "finance@billgen.local:${DEMO_PASSWORD}" \
+curl -u "customer@demo.local:${DEMO_PASSWORD}" \
   http://localhost:8080/api/v1/invoices
 ```
 
-Replace the demo account/password with provisioned credentials outside local development.
+Use provisioned accounts outside local development.
 
 ## Invoices
 
 ### `GET /invoices`
 
-Returns the invoice list, newest first. Optional query parameter: `customerId`.
-
-```http
-GET /api/v1/invoices?customerId=1
-```
+Returns invoices visible to the authenticated account, newest first. Admin receives all account invoices. A Customer receives only its own. Admin may optionally filter with `customerId`; Customer can supply only its own account ID (another account returns `404`).
 
 ### `GET /invoices/{id}`
 
-Returns invoice details, customer summary, amounts and line-item snapshots.
+Returns invoice details, customer summary, selected template, amounts and line-item snapshots. A Customer can only load its own invoice.
 
 ### `POST /invoices`
 
-Creates an invoice and returns `201 Created` with a `Location` header and the new resource.
+Creates an invoice for the authenticated Customer account. Admin credentials cannot create customer-owned invoices. `customerId` is optional; if a Customer supplies it, it must equal its own account ID. The backend resolves the owner from the principal and validates the chosen template against the active purchased plan.
 
 ```json
 {
-  "customerId": 1,
   "issueDate": "2026-10-10",
   "dueDate": "2026-10-24",
   "notes": "Thank you for your business.",
   "currency": "INR",
-  "templateCode": "CLASSIC",
+  "templateId": 1,
   "initialStatus": "SENT",
   "lines": [
     {
@@ -42,56 +39,118 @@ Creates an invoice and returns `201 Created` with a `Location` header and the ne
       "quantity": 1,
       "unitPrice": 48000.00,
       "taxRate": 18.00
-    },
-    {
-      "description": "Research and discovery",
-      "quantity": 8,
-      "unitPrice": 3500.00,
-      "taxRate": 18.00
     }
   ]
 }
 ```
 
-`initialStatus` is `DRAFT` or `SENT`. `currency` is a 3-letter code (defaults to INR when omitted). Supported `templateCode` values are `CLASSIC`, `MODERN` and `MINIMAL`. Each invoice must have 1–30 lines. Quantity must be positive with up to three fractional digits; price and tax rate allow two. Tax rate is 0–100%.
+`initialStatus` must be `DRAFT` or `SENT`. `currency` is a 3-letter code (defaults to INR when omitted). `templateId` must be included in the Customer's active plan. Each invoice must have 1–30 lines. Quantity must be positive with up to three fractional digits; price and tax rate allow two. Tax rate is 0–100%.
 
 The application calculates subtotal, tax and total server-side; submitted totals are not accepted.
 
 ### `PATCH /invoices/{id}/status`
 
-Moves an invoice one step forward. Valid transitions: `DRAFT` → `SENT`, `SENT` → `PAID`.
+Moves an owned invoice from `DRAFT` to `SENT` or `SENT` to `PAID`.
 
 ```json
 { "status": "PAID" }
 ```
 
-A repeated request for the invoice's current state is idempotent. Reverse transitions and skipped states return `400 Bad Request`.
+## Products
 
-## Customers
+### `GET /products`
 
-- `GET /customers` — returns the customer directory.
-- `GET /customers/{id}` — returns one customer's contact and billing details.
+Admin receives the cross-account catalogue. Customer receives its own products only.
 
-Customer records are managed through the web application in this starter.
+### `POST /products`
 
-## Catalogue and plans
-
-- `GET /products` — active products and services, including current price and tax defaults.
-- `GET /plans` — active subscription plan catalogue.
-
-The separate public pricing page is available as HTML at `/plans` without signing in.
-
-## Response and errors
-
-Successful responses use JSON (`application/json`). Validation/business errors use RFC 9457-style Problem Details (`application/problem+json`) with an HTTP status, title and detail, for example:
+Creates a product for the authenticated Customer. The owner is taken from the principal. A supplied `categoryId` must belong to the same account.
 
 ```json
 {
-  "type": "about:blank",
-  "title": "Bad Request",
-  "status": 400,
-  "detail": "The due date must be on or after the issue date."
+  "sku": "SVC-CONSULT",
+  "name": "Consulting services",
+  "productType": "SERVICE",
+  "categoryId": 1,
+  "description": "Strategy and consulting, billed by the hour.",
+  "unitPrice": 3500.00,
+  "taxRate": 18.00,
+  "active": true
 }
 ```
 
-Common statuses: `200` success, `201` created, `400` invalid request or transition, `401` missing/invalid credentials, `403` insufficient role, `404` unknown resource, `409` uniqueness/reference conflict.
+### `PUT /products/{id}` and `DELETE /products/{id}`
+
+Update or delete a product owned by the authenticated Customer. Admin writes are forbidden. Product IDs owned by a different customer return `404`.
+
+## Product categories
+
+### `GET /categories`
+
+Admin receives categories across accounts; Customer receives its own categories only.
+
+### `POST /categories`
+
+Creates a category for the authenticated Customer.
+
+```json
+{ "name": "Professional services", "description": "Consulting and design" }
+```
+
+### `PUT /categories/{id}` and `DELETE /categories/{id}`
+
+Update or delete a category owned by the authenticated Customer. On deletion, products in that category remain in the catalogue and become uncategorized. Admin writes are forbidden; another account's category ID returns `404`.
+
+## Templates and plans
+
+### `GET /templates`
+
+Returns active templates. Admin receives all active templates; Customer receives only active templates included in its active purchased plan. No customer-accessible endpoint returns the full template catalogue.
+
+### `GET /plans`
+
+Returns active plans and their included template metadata.
+
+## Customer subscriptions
+
+### `GET /customers/{id}/subscription`
+
+Returns the active subscription for the requested account. Admin may read any account. Customer may request only its own account; another account returns `404`.
+
+### `POST /customers/{id}/subscription`
+
+Activates an available plan. A Customer may only activate a plan on its own account; Admin may assign a plan to any customer account. Plan activation is immediate in this starter; payment checkout is not implemented.
+
+```json
+{ "planId": 2 }
+```
+
+### `DELETE /customers/{id}/subscription`
+
+Cancels the active subscription. Template access is withdrawn immediately. Customer can cancel only its own subscription; Admin may manage any account.
+
+## Customer accounts and statistics
+
+### `GET /customers`
+
+Admin receives all visible customer accounts. Customer receives only its own account.
+
+### `GET /customers/{id}`
+
+Returns account details only if the caller is an Admin or the account's own Customer.
+
+### `GET /customers/{id}/stats`
+
+Returns invoice, product and category counts, total billed, login details and subscription/plan details for one account. Customer may retrieve only its own statistics.
+
+### `GET /account-stats`
+
+Admin receives customer-wise statistics for every visible account. Customer receives only its own row.
+
+## Errors
+
+- `400 Bad Request`: invalid data, an unavailable template, or a template not included in the active plan.
+- `401 Unauthorized`: missing or invalid credentials.
+- `403 Forbidden`: authenticated role is not permitted to perform an action (e.g. Admin attempting to write a customer-owned product).
+- `404 Not Found`: missing resource or a record owned by a different Customer account.
+- `409 Conflict`: a database uniqueness/constraint conflict.
