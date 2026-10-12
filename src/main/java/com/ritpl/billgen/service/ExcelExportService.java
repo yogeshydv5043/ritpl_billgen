@@ -53,10 +53,12 @@ public class ExcelExportService {
             Styles styles = new Styles(workbook);
             TreeMap<YearMonth, List<Invoice>> months = new TreeMap<>();
             for (int i = 9; i >= 0; i--) months.put(currentMonth.minusMonths(i), new ArrayList<>());
+            // Only invoices inside the reporting window may appear on any sheet of this report.
+            List<Invoice> windowed = new ArrayList<>();
             for (Invoice invoice : invoices) {
                 if (invoice.getGeneratedAt() == null) continue;
                 YearMonth month = YearMonth.from(invoice.getGeneratedAt().atZone(zone));
-                if (months.containsKey(month)) months.get(month).add(invoice);
+                if (months.containsKey(month)) { months.get(month).add(invoice); windowed.add(invoice); }
             }
 
             Sheet summary = workbook.createSheet("Monthly Summary");
@@ -102,7 +104,7 @@ public class ExcelExportService {
             List<String> detailHeaders = List.of("Invoice Number", "Generated At", "Company Snapshot", "Template Snapshot", "Status", "Issue Date", "Due Date",
                     "Currency", "Subtotal", "Tax", "Discount", "Total", "Allowance Counted");
             header(details, detailHeaders, styles.header()); rowNum = 1;
-            for (Invoice invoice : invoices) {
+            for (Invoice invoice : windowed) {
                 Row row = details.createRow(rowNum++); int c = 0;
                 text(row, c++, invoice.getInvoiceNumber(), styles.text());
                 text(row, c++, invoice.getGeneratedAt() == null ? "" : TIME.format(invoice.getGeneratedAt().atZone(zone)), styles.text());
@@ -122,7 +124,7 @@ public class ExcelExportService {
                     new String[] {"Window", currentMonth.minusMonths(9) + " through " + currentMonth + " (10 calendar months, inclusive)"},
                     new String[] {"Timezone", zone.getId()},
                     new String[] {"Generated at", TIME.format(generatedAt.atZone(zone))},
-                    new String[] {"Detail rows", Integer.toString(invoices.size())},
+                    new String[] {"Detail rows", Integer.toString(windowed.size())},
                     new String[] {"Current invoice allowance", quota == null ? "Not available" : Long.toString(quota.invoiceLimit())},
                     new String[] {"Current allowance remaining", quota == null ? "Not available" : Long.toString(quota.remainingInvoices())},
                     new String[] {"Usage policy", "DRAFT does not consume allowance; SENT/PAID and later-cancelled issued invoices do."},

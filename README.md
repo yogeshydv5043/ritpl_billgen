@@ -105,4 +105,16 @@ mvn test
 mvn package
 ```
 
-The invoice calculator has unit tests. A live integration check also needs PostgreSQL, Redis and Docker; run `docker compose up --build` and test the pages/API in a browser/client.
+The invoice calculator, tenant-scope rules and invoice tenant isolation have unit tests. A live integration check also needs PostgreSQL, Redis and Docker; run `docker compose up --build` and test the pages/API in a browser/client.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request. It provisions JDK 17 (Temurin) and a PostgreSQL 16 service container, then runs:
+
+```bash
+mvn -B -ntp -DskipTests compile
+mvn -B -ntp test
+mvn -B -ntp -DskipTests package
+```
+
+Surefire reports are uploaded as a workflow artifact on every run, including failures. The job uses a throwaway `billgen_test` database with CI-only credentials, so no real environment values are required.
