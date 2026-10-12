@@ -99,6 +99,7 @@ class BillingIntegrationTest {
     @Autowired InvoiceRepository invoices;
     @Autowired CustomerSubscriptionRepository subscriptionRepository;
     @Autowired JdbcTemplate jdbc;
+    @Autowired com.ritpl.billgen.service.SubscriptionExpiryNotificationService notificationService;
 
     @Test
     void migrationsAndMappingsAgreeOnTheDatabaseSchema() {
@@ -226,6 +227,35 @@ class BillingIntegrationTest {
         // Cross-tenant reads are refused, including the row behind a PDF or print download.
         Long foreignInvoice = visible.getId();
         assertThrows(ResourceNotFoundException.class, () -> invoiceService.findById(second.scope(), foreignInvoice));
+    }
+
+    @Test
+    void expiryRemindersAreRecordedOncePerSubscriptionAndReminderPeriod() {
+        String label = "remind-" + System.nanoTime();
+        BillTemplate template = templateService.save(null, new TemplateCommand("IT-" + label, "IT layout",
+                null, BillTemplateStyle.CLASSIC, "#2563EB", true, 1));
+        SubscriptionPlan plan = planService.save(null, new PlanCommand("IT-" + label, "IT plan", "test", "integration",
+                new BigDecimal("999.00"), new BigDecimal("9990.00"), "INR", 1, 10, 50, 1, "testing", false, true, 1,
+                Set.of(template.getId())));
+        Customer customer = customerService.register(new RegistrationCommand("Acme Traders " + label, "Owner",
+                label + "@example.test", "9999999999", "India", "Integration!2026"));
+        LocalDate today = subscriptionService.today();
+        CustomerSubscription subscription = subscriptionService.activate(TenantScope.administrator(),
+                customer.getId(), plan.getId(), "it-admin", today, today.plusDays(7));
+
+        notificationService.createDailyNotifications();
+        long afterFirstPass = notificationCount(subscription.getId());
+        notificationService.createDailyNotifications();
+        long afterSecondPass = notificationCount(subscription.getId());
+
+        assertEquals(1L, afterFirstPass, "the 7-day reminder is recorded for the subscription");
+        assertEquals(afterFirstPass, afterSecondPass, "a second scheduler pass never repeats the same reminder period");
+    }
+
+    private long notificationCount(Long subscriptionId) {
+        Long count = jdbc.queryForObject("select count(*) from subscription_notification_logs where subscription_id = ?",
+                Long.class, subscriptionId);
+        return count == null ? 0L : count;
     }
 
     private CreateInvoiceCommand sentInvoice(Tenant tenant) {
