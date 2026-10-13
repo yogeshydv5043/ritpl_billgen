@@ -13,6 +13,7 @@ public interface AuditTypeRepository extends JpaRepository<AuditType, Long> {
     Optional<AuditType> findByCodeAndDeletedAtIsNull(String code);
     boolean existsByCodeIgnoreCaseAndIdNot(String code, Long id);
     boolean existsByCodeIgnoreCase(String code);
+    boolean existsByNameIgnoreCase(String name);
     boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
 
     long countByActiveTrueAndDeletedAtIsNull();
