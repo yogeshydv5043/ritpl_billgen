@@ -20,6 +20,8 @@ import com.ritpl.billgen.entity.Customer;
 import com.ritpl.billgen.entity.UserRole;
 import com.ritpl.billgen.repository.AppUserRepository;
 import com.ritpl.billgen.repository.CustomerRepository;
+import com.ritpl.billgen.repository.CustomerSubscriptionRepository;
+import com.ritpl.billgen.repository.InvoiceRepository;
 
 /** Public self-service registration: role assignment, password hashing and duplicate prevention. */
 class CustomerRegistrationTest {
@@ -30,7 +32,12 @@ class CustomerRegistrationTest {
     private final AppUserRepository users = mock(AppUserRepository.class);
     private final PasswordEncoder encoder = mock(PasswordEncoder.class);
     private final AuditService audit = mock(AuditService.class);
-    private final CustomerService service = new CustomerService(customers, users, encoder, audit);
+    // Registration touches neither invoices nor subscriptions, but the deletion guard is enabled so
+    // the same policy the web tier uses is under test.
+    private final InvoiceRepository invoices = mock(InvoiceRepository.class);
+    private final CustomerSubscriptionRepository subscriptions = mock(CustomerSubscriptionRepository.class);
+    private final CustomerService service = new CustomerService(customers, users, encoder, audit, invoices,
+            subscriptions, true);
 
     @Test
     void registerCreatesACustomerLoginWithAHashedPassword() {
