@@ -24,11 +24,11 @@ public interface NotificationDeliveryRepository extends JpaRepository<Notificati
             @Param("status") DeliveryStatus status, @Param("from") Instant from, Pageable pageable);
 
     @EntityGraph(attributePaths = "customer")
-    List<NotificationDelivery> findTop50ByCustomerIdOrderByCreatedAtDesc(Long customerId);
+    List<NotificationDelivery> findTop50ByCustomer_IdOrderByCreatedAtDesc(Long customerId);
 
     @EntityGraph(attributePaths = "customer")
     List<NotificationDelivery> findTop50ByNotification_IdOrderByCreatedAtDesc(Long notificationId);
 
     long countByStatus(DeliveryStatus status);
-    long countByCustomerIdAndCreatedAtAfter(Long customerId, Instant from);
+    long countByCustomer_IdAndCreatedAtAfter(Long customerId, Instant from);
 }

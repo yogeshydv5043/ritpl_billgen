@@ -89,7 +89,7 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public List<NotificationDelivery> recentForCustomer(long customerId) {
-        return deliveries.findTop50ByCustomerIdOrderByCreatedAtDesc(customerId);
+        return deliveries.findTop50ByCustomer_IdOrderByCreatedAtDesc(customerId);
     }
 
     @Transactional(readOnly = true)
