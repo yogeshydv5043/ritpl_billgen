@@ -37,8 +37,8 @@ public class AuthenticationAudit {
         details.put("method", "password");
         details.put("role", principal.getRole());
         write(() -> audit.record(AuditEventCommand.success(principal.getCustomerId(), "LOGIN", "SESSION", "Session",
-                principal.getId(), summary(principal) + " signed in", null, details))
-                .withActor(principal.getEmail()));
+                principal.getId(), summary(principal) + " signed in", null, details)
+                .withActor(principal.getUsername())));
     }
 
     /** Records a rejected attempt without confirming whether the account exists. */
@@ -47,8 +47,8 @@ public class AuthenticationAudit {
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("reason", "invalid_credentials");
         write(() -> audit.recordFailure(AuditEventCommand.failure(null, "LOGIN_FAILURE", "SESSION", "Session", null,
-                "Sign-in was rejected for " + clip(attempted == null ? "(empty)" : attempted), details))
-                .withActor(clip(attempted == null ? "unknown" : attempted)));
+                "Sign-in was rejected for " + clip(attempted == null ? "(empty)" : attempted), details)
+                .withActor(clip(attempted == null ? "unknown" : attempted))));
     }
 
     /** Called while the session is being torn down, so the row is written before it disappears. */
@@ -58,8 +58,8 @@ public class AuthenticationAudit {
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("role", principal.getRole());
         write(() -> audit.record(AuditEventCommand.success(principal.getCustomerId(), "LOGOUT", "SESSION", "Session",
-                principal.getId(), summary(principal) + " signed out", null, details))
-                .withActor(principal.getEmail()));
+                principal.getId(), summary(principal) + " signed out", null, details)
+                .withActor(principal.getUsername())));
     }
 
     /**

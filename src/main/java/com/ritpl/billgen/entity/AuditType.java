@@ -56,8 +56,8 @@ public class AuditType {
     public boolean hasAction() { return action != null && !action.isBlank(); }
     /** True when the definition covers every event raised on one resource type. */
     public boolean hasResourceType() { return resourceType != null && !resourceType.isBlank(); }
-    boolean matchesAction(String recordAction) { return hasAction() && action.equalsIgnoreCase(recordAction); }
-    boolean matchesResourceType(String recordResourceType) {
+    public boolean matchesAction(String recordAction) { return hasAction() && action.equalsIgnoreCase(recordAction); }
+    public boolean matchesResourceType(String recordResourceType) {
         return !hasAction() && hasResourceType() && resourceType.equalsIgnoreCase(recordResourceType);
     }
 
