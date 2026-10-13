@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.Base64;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -26,6 +28,11 @@ public class Customer {
     @Column(length = 24) private String gstin;
     @Column(name = "logo_data", columnDefinition = "bytea") private byte[] logoData;
     @Column(name = "logo_content_type", length = 40) private String logoContentType;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 16)
+    private AccountStatus status = AccountStatus.ACTIVE;
+    @Column(name = "deleted_at") private java.time.Instant deletedAt;
+    @Column(name = "deleted_by", length = 190) private String deletedBy;
+    @Column(name = "deletion_reason", length = 400) private String deletionReason;
     @Column(name = "system_account", nullable = false) private boolean systemAccount = false;
     @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
 
@@ -66,5 +73,15 @@ public class Customer {
     public String getLogoContentType() { return logoContentType; }
     public void setLogoContentType(String v) { logoContentType = v; }
     public boolean isSystemAccount() { return systemAccount; }
+    public AccountStatus getStatus() { return status == null ? AccountStatus.ACTIVE : status; }
+    public void setStatus(AccountStatus v) { status = v == null ? AccountStatus.ACTIVE : v; }
+    public boolean isActiveAccount() { return getStatus() == AccountStatus.ACTIVE; }
+    public java.time.Instant getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(java.time.Instant v) { deletedAt = v; }
+    public String getDeletedBy() { return deletedBy; }
+    public void setDeletedBy(String v) { deletedBy = v; }
+    public String getDeletionReason() { return deletionReason; }
+    public void setDeletionReason(String v) { deletionReason = v; }
+    public boolean isDeleted() { return deletedAt != null; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

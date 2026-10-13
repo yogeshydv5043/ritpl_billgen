@@ -1,6 +1,7 @@
 package com.ritpl.billgen.service;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.data.domain.Page;
@@ -16,8 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ritpl.billgen.entity.AuditRecord;
+import com.ritpl.billgen.entity.AuditType;
 import com.ritpl.billgen.entity.Customer;
 import com.ritpl.billgen.repository.AuditRecordRepository;
+import com.ritpl.billgen.repository.AuditTypeRepository;
 import com.ritpl.billgen.repository.CustomerRepository;
 import com.ritpl.billgen.security.TenantScope;
 
@@ -26,23 +29,63 @@ import com.ritpl.billgen.security.TenantScope;
 public class AuditService {
     private static final Set<String> SENSITIVE_KEYS = Set.of("password", "passwordhash", "secret", "token",
             "authorization", "credential", "apikey", "paymentcredential", "cardnumber", "cvv");
+    /** How long the registry is remembered while tagging events; short, so edits take effect quickly. */
+    private static final long TYPE_CACHE_TTL_MILLIS = 30_000L;
+
     private final AuditRecordRepository records;
     private final CustomerRepository customers;
+    private final AuditTypeRepository auditTypes;
     private final ObjectMapper mapper;
+    private volatile List<AuditType> knownTypes = List.of();
+    private volatile long knownTypesLoadedAt;
 
-    public AuditService(AuditRecordRepository records, CustomerRepository customers, ObjectMapper mapper) {
-        this.records = records; this.customers = customers; this.mapper = mapper;
+    public AuditService(AuditRecordRepository records, CustomerRepository customers, AuditTypeRepository auditTypes,
+            ObjectMapper mapper) {
+        this.records = records; this.customers = customers; this.auditTypes = auditTypes; this.mapper = mapper;
     }
 
     @Transactional
     public AuditRecord record(AuditEventCommand command) {
         if (command == null) return null;
         Customer customer = command.customerId() == null ? null : customers.findById(command.customerId()).orElse(null);
-        AuditRecord record = new AuditRecord(customer, clip(actor(command), 190), required(command.action(), "SYSTEM", 48),
-                required(command.resourceType(), "SYSTEM", 48), clip(command.resourceName(), 160),
-                clip(command.resourceId(), 80), "FAILURE".equals(command.outcome()) ? "FAILURE" : "SUCCESS",
+        String action = required(command.action(), "SYSTEM", 48);
+        String resourceType = required(command.resourceType(), "SYSTEM", 48);
+        AuditRecord record = new AuditRecord(customer, clip(actor(command), 190), action, resourceType,
+                clip(command.resourceName(), 160), clip(command.resourceId(), 80),
+                "FAILURE".equals(command.outcome()) ? "FAILURE" : "SUCCESS",
                 required(command.summary(), "Action recorded.", 1000), json(command.beforeValues()), json(command.afterValues()));
+        // Tagging the event with the audit definition that governs it is what makes quotas, alerts and
+        // retention configurable per event type. An unmatched event is still recorded, never dropped:
+        // refusing to write an audit row would be the worse failure.
+        record.setAuditTypeId(matchTypeId(action, resourceType));
         return records.save(record);
+    }
+
+    /** The audit definition that governs an event, read from a short-lived cache of the registry. */
+    private Long matchTypeId(String action, String resourceType) {
+        for (AuditType type : activeTypes()) {
+            if (type.matches(action, resourceType)) return type.getId();
+        }
+        return null;
+    }
+
+    private List<AuditType> activeTypes() {
+        long now = System.currentTimeMillis();
+        if (now - knownTypesLoadedAt > TYPE_CACHE_TTL_MILLIS) {
+            try {
+                knownTypes = auditTypes.findByActiveTrueAndDeletedAtIsNullOrderByEventCategoryAscNameAsc();
+            } catch (RuntimeException e) {
+                knownTypes = List.of();            // never let a registry read break audit writing
+            }
+            knownTypesLoadedAt = now;
+        }
+        return knownTypes;
+    }
+
+    /** Drops the cached registry after an administrator edits it. */
+    public void invalidateTypeCache() {
+        knownTypesLoadedAt = 0L;
+        knownTypes = List.of();
     }
 
     /** Persists failed attempts even when the surrounding business transaction is rolled back. */

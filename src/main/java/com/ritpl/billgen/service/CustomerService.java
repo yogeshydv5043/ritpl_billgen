@@ -9,11 +9,16 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.ritpl.billgen.entity.AccountStatus;
 import com.ritpl.billgen.entity.AppUser;
 import com.ritpl.billgen.entity.Customer;
+import com.ritpl.billgen.entity.InvoiceStatus;
+import com.ritpl.billgen.entity.SubscriptionStatus;
 import com.ritpl.billgen.entity.UserRole;
 import com.ritpl.billgen.repository.AppUserRepository;
 import com.ritpl.billgen.repository.CustomerRepository;
+import com.ritpl.billgen.repository.CustomerSubscriptionRepository;
+import com.ritpl.billgen.repository.InvoiceRepository;
 import com.ritpl.billgen.security.TenantScope;
 
 /**
@@ -29,21 +34,43 @@ public class CustomerService {
     private final AppUserRepository users;
     private final PasswordEncoder passwordEncoder;
     private final AuditService audit;
+    private final InvoiceRepository invoices;
+    private final CustomerSubscriptionRepository subscriptions;
+    /**
+     * Documented deletion policy. Outstanding invoices block a soft delete unless the administrator
+     * confirms the override, because the invoice history still belongs to a live relationship.
+     */
+    private final boolean blockOutstandingInvoices;
 
-    public CustomerService(CustomerRepository customers, AppUserRepository users, PasswordEncoder passwordEncoder, AuditService audit) {
+    public CustomerService(CustomerRepository customers, AppUserRepository users, PasswordEncoder passwordEncoder,
+            AuditService audit, InvoiceRepository invoices, CustomerSubscriptionRepository subscriptions,
+            @org.springframework.beans.factory.annotation.Value("${app.customers.deletion.block-outstanding-invoices:true}")
+            boolean blockOutstandingInvoices) {
         this.customers = customers; this.users = users; this.passwordEncoder = passwordEncoder; this.audit = audit;
+        this.invoices = invoices; this.subscriptions = subscriptions;
+        this.blockOutstandingInvoices = blockOutstandingInvoices;
     }
 
     /** Admins may search all real customer accounts; customers only receive their own account. */
     @Transactional(readOnly = true)
     public List<Customer> findAll(TenantScope scope, String search) {
         if (!scope.isAdminScope()) return List.of(findById(scope, scope.requireCustomerId()));
-        if (search == null || search.isBlank()) return customers.findBySystemAccountFalseOrderByCompanyNameAsc();
+        if (search == null || search.isBlank()) return customers.findBySystemAccountFalseAndDeletedAtIsNullOrderByCompanyNameAsc();
         return customers.searchVisible(search.trim());
     }
 
+    /** Live accounts only: a soft-deleted account is invisible to the ordinary lookups. */
     @Transactional(readOnly = true)
     public Customer findById(TenantScope scope, long id) {
+        scope.requireCustomerAccess(id);
+        Customer customer = customers.findByIdAndDeletedAtIsNullAndSystemAccountFalse(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer not found."));
+        return customer;
+    }
+
+    /** Used by the deleted-accounts view and by restore. */
+    @Transactional(readOnly = true)
+    public Customer findByIdIncludingDeleted(TenantScope scope, long id) {
         scope.requireCustomerAccess(id);
         Customer customer = customers.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Customer not found."));
@@ -159,6 +186,30 @@ public class CustomerService {
                 "Administrator reset a customer login password; the password itself is never logged.", null, Map.of("passwordChanged", true)));
     }
 
+    /**
+     * Lets a signed-in administrator change their own password. The current password is verified
+     * first, and neither password is ever written to the audit trail.
+     */
+    @Transactional
+    public void changeAdminPassword(com.ritpl.billgen.security.AppUserPrincipal principal, String currentPassword,
+            String newPassword) {
+        if (principal == null || principal.getId() == null) throw new IllegalArgumentException("Sign in again to change a password.");
+        AppUser user = users.findById(principal.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found."));
+        if (currentPassword == null || !passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            audit.record(AuditEventCommand.failure(user.getCustomer() == null ? null : user.getCustomer().getId(),
+                    "PASSWORD_CHANGE_FAILURE", "ADMIN_ACCOUNT", "Administrator login", user.getId(),
+                    "A password change was rejected because the current password did not match.", Map.of()));
+            throw new IllegalArgumentException("The current password is not correct.");
+        }
+        validatePassword(newPassword);
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        users.save(user);
+        audit.record(AuditEventCommand.success(null, "PASSWORD_CHANGE", "ADMIN_ACCOUNT", "Administrator login", user.getId(),
+                "Administrator changed their own password. The password itself is never logged.", null,
+                Map.of("passwordChanged", true)));
+    }
+
     private void apply(CustomerAccountCommand command, Customer customer) {
         if (command == null) throw new IllegalArgumentException("Enter the account details.");
         if (command.companyName() == null || command.companyName().isBlank() || command.companyName().trim().length() > 160) {
@@ -172,7 +223,18 @@ public class CustomerService {
         boolean duplicate = customer.getId() == null
                 ? customers.existsByEmailIgnoreCase(email)
                 : customers.existsByEmailIgnoreCaseAndIdNot(email, customer.getId());
-        if (duplicate) throw new IllegalArgumentException("A customer account with this email already exists.");
+        if (duplicate) {
+            boolean archived = customers.findByEmailIgnoreCaseAndDeletedAtIsNotNull(email).isPresent();
+            throw new IllegalArgumentException(archived
+                    ? "That email belongs to a deleted account. Restore it first, or use another address."
+                    : "A customer account with this email already exists.");
+        }
+        if (command.gstin() != null && !command.gstin().isBlank() && !command.gstin().trim().matches("[0-9A-Za-z]{10,24}")) {
+            throw new IllegalArgumentException("Tax or registration details may use 10-24 letters and digits.");
+        }
+        if (command.phone() != null && !command.phone().isBlank() && !command.phone().trim().matches("[0-9+()\\- ]{6,40}")) {
+            throw new IllegalArgumentException("A phone number may only use digits, spaces and +()-.");
+        }
         customer.setCompanyName(command.companyName().trim());
         customer.setContactName(command.contactName().trim());
         customer.setEmail(email);
@@ -273,4 +335,107 @@ public class CustomerService {
     }
 
     private String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+
+    // ------------------------------------------------------------------------------------------
+    // Account lifecycle for the Super Admin panel: enable, disable, soft delete, restore.
+    // ------------------------------------------------------------------------------------------
+
+    /** Enabling or disabling an account. A disabled account keeps every record and cannot sign in. */
+    @Transactional
+    @CacheEvict(cacheNames = "dashboard", allEntries = true)
+    public Customer setAccountStatus(TenantScope scope, long id, AccountStatus status, String actor) {
+        requireAdmin(scope);
+        Customer customer = findById(scope, id);
+        AccountStatus before = customer.getStatus();
+        if (before == status) return customer;
+        customer.setStatus(status);
+        // Login availability follows the account: a disabled company cannot authenticate.
+        users.findByCustomer_Id(id).ifPresent(login -> login.setEnabled(status == AccountStatus.ACTIVE));
+        audit.record(AuditEventCommand.success(id, status == AccountStatus.ACTIVE ? "ENABLE" : "DISABLE", "CUSTOMER",
+                "Customer account", id, "Administrator changed a customer account's availability.",
+                Map.of("status", before.name()), Map.of("status", status.name(), "actor", actor == null ? "admin" : actor)));
+        return customers.save(customer);
+    }
+
+    /** What a deletion would affect, shown in the confirmation dialog before anything changes. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> deletionAssessment(TenantScope scope, long id) {
+        requireAdmin(scope);
+        Customer customer = findById(scope, id);
+        long outstanding = invoices.countByCustomer_IdAndStatus(id, InvoiceStatus.SENT);
+        long issued = invoices.countByCustomer_IdAndUsageCountedTrue(id);
+        boolean activeSubscription = subscriptions
+                .findFirstByCustomer_IdAndStatus(id, SubscriptionStatus.ACTIVE)
+                .filter(subscription -> subscription.isEffective(java.time.LocalDate.now()))
+                .isPresent();
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("companyName", customer.getCompanyName());
+        result.put("outstandingInvoices", outstanding);
+        result.put("issuedInvoices", issued);
+        result.put("activeSubscription", activeSubscription);
+        result.put("blocked", blockOutstandingInvoices && outstanding > 0);
+        result.put("needsConfirmation", activeSubscription || outstanding > 0 || issued > 0);
+        return result;
+    }
+
+    /**
+     * Soft deletion. Nothing is destroyed: invoices, audit records and the login all survive, the
+     * account disappears from standard lists, and the timestamp and administrator are recorded.
+     */
+    @Transactional
+    @CacheEvict(cacheNames = {"dashboard", "active-plans", "customer-templates"}, allEntries = true)
+    public void softDelete(TenantScope scope, long id, String reason, boolean force, String actor) {
+        requireAdmin(scope);
+        Customer customer = findById(scope, id);
+        Map<String, Object> assessment = deletionAssessment(scope, id);
+        if (!force) {
+            if (Boolean.TRUE.equals(assessment.get("activeSubscription"))) {
+                throw new IllegalArgumentException("This account has an active subscription. Cancel or move it to a plan "
+                        + "before deleting, or confirm the deletion with the override checked.");
+            }
+            if (Boolean.TRUE.equals(assessment.get("blocked"))) {
+                throw new IllegalArgumentException("This account has " + assessment.get("outstandingInvoices")
+                        + " outstanding invoice(s). Resolve them or confirm the deletion with the override checked.");
+            }
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Record why the account is being deleted.");
+        }
+        customer.setDeletedAt(java.time.Instant.now());
+        customer.setDeletedBy(actor == null ? "admin" : actor);
+        customer.setDeletionReason(reason.trim().length() > 400 ? reason.trim().substring(0, 400) : reason.trim());
+        customer.setStatus(AccountStatus.DISABLED);
+        users.findByCustomer_Id(id).ifPresent(login -> login.setEnabled(false));
+        subscriptions.findFirstByCustomer_IdAndStatus(id, SubscriptionStatus.ACTIVE)
+                .ifPresent(subscription -> {
+                    subscription.setStatus(SubscriptionStatus.CANCELLED);
+                    subscriptions.save(subscription);
+                });
+        audit.record(AuditEventCommand.success(id, "SOFT_DELETE", "CUSTOMER", "Customer account", id,
+                "Administrator soft-deleted a customer account; invoices and audit history were preserved.",
+                Map.of("status", "ACTIVE"),
+                Map.of("deleted", true, "reason", customer.getDeletionReason(),
+                        "outstandingInvoices", assessment.get("outstandingInvoices"),
+                        "activeSubscription", assessment.get("activeSubscription"))));
+        customers.save(customer);
+    }
+
+    /** Restores a soft-deleted account. It comes back disabled so the administrator re-enables it deliberately. */
+    @Transactional
+    @CacheEvict(cacheNames = {"dashboard", "active-plans", "customer-templates"}, allEntries = true)
+    public Customer restore(TenantScope scope, long id, String actor) {
+        requireAdmin(scope);
+        Customer customer = findByIdIncludingDeleted(scope, id);
+        if (!customer.isDeleted()) throw new IllegalArgumentException("This account is not deleted.");
+        customer.setDeletedAt(null);
+        customer.setDeletedBy(null);
+        customer.setDeletionReason(null);
+        customer.setStatus(AccountStatus.DISABLED);
+        users.findByCustomer_Id(id).ifPresent(login -> login.setEnabled(false));
+        Customer saved = customers.save(customer);
+        audit.record(AuditEventCommand.success(id, "RESTORE", "CUSTOMER", "Customer account", id,
+                "Administrator restored a soft-deleted customer account. The login stays disabled until enabled.",
+                Map.of("deleted", true), Map.of("deleted", false, "actor", actor == null ? "admin" : actor)));
+        return saved;
+    }
 }

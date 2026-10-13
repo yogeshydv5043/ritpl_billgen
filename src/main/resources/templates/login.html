@@ -21,6 +21,7 @@
                 <h2>Sign in to your<br>workspace</h2>
                 <p class="auth-subtitle">Pick up right where you left off.</p>
                 <div class="notice notice-error" th:if="${param.error}">We couldn’t sign you in with those details. Please try again.</div>
+                <div class="notice notice-error" th:if="${param.blocked}">This account is disabled or has been closed. An administrator can enable it again.</div>
                 <div class="notice notice-success" th:if="${param.logout}">You’ve been signed out securely.</div>
                 <form th:action="@{/login}" method="post" class="stack-form">
                     <label for="username">Email address</label>

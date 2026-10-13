@@ -11,6 +11,7 @@ public interface SubscriptionNotificationLogRepository extends JpaRepository<Sub
     @EntityGraph(attributePaths = {"subscription", "customer"})
     List<SubscriptionNotificationLog> findTop30ByCustomer_IdOrderByCreatedAtDesc(Long customerId);
     java.util.Optional<SubscriptionNotificationLog> findByIdAndCustomer_Id(Long id, Long customerId);
+    long countByCustomer_IdAndStatusIn(Long customerId, java.util.List<com.ritpl.billgen.entity.NotificationStatus> statuses);
 
     /**
      * Duplicate-reminder guard for one subscription and reminder period. This is an explicit query

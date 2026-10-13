@@ -1,20 +1,145 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{fragments/layout :: head(${formTitle})}"></head>
-<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
-<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content page-content-narrow">
-    <div class="breadcrumb"><a th:href="@{/admin/templates}">Templates</a><span>/</span><span th:text="${formTitle}">Add bill template</span></div>
-    <section class="page-title-row compact-title"><div><span class="kicker">ADMIN TEMPLATE CATALOGUE</span><h1 th:text="${formTitle}">Add bill template</h1><p class="page-lede">Templates are reusable print designs. Plans decide which customers can use them.</p></div></section>
-    <form class="panel form-panel" th:action="@{${formAction}}" th:object="${templateForm}" method="post" novalidate>
-        <div class="form-intro"><span class="form-step">01</span><div><h2>Template details</h2><p>Give this template a unique code and a customer-friendly name.</p></div></div>
-        <div class="form-grid"><div class="field"><label for="name">Name <span class="required">*</span></label><input id="name" th:field="*{name}" placeholder="e.g. Clean studio"><small class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></small></div><div class="field"><label for="code">Unique code <span class="required">*</span></label><input id="code" th:field="*{code}" placeholder="e.g. CLEAN-STUDIO" autocapitalize="characters"><small class="field-error" th:if="${#fields.hasErrors('code')}" th:errors="*{code}"></small></div>
-            <div class="field field-full"><label for="description">Description</label><textarea id="description" rows="2" th:field="*{description}" maxlength="500" placeholder="A clean, compact statement."></textarea><small class="field-error" th:if="${#fields.hasErrors('description')}" th:errors="*{description}"></small></div>
-            <div class="field"><label for="style">Print layout <span class="required">*</span></label><select id="style" th:field="*{style}"><option th:each="style : ${styles}" th:value="${style}" th:text="${style.displayName + ' — ' + style.description}">Classic</option></select><small class="field-help">Choose the renderer used when printing an invoice.</small><small class="field-error" th:if="${#fields.hasErrors('style')}" th:errors="*{style}"></small></div>
-            <div class="field"><label for="accentColor">Accent colour <span class="optional">OPTIONAL</span></label><div class="accent-picker-row"><input id="accentColor" th:field="*{accentColor}" type="color" value="#17172f"><span th:if="${#fields.hasErrors('accentColor')}" class="field-error" th:errors="*{accentColor}"></span></div><small class="field-help">Affects the print view accent. Leave blank to use the layout default.</small></div>
-            <div class="field"><label for="sortOrder">Display order</label><input id="sortOrder" type="number" th:field="*{sortOrder}"></div>
-            <div class="field"><label class="check-field"><input type="checkbox" th:field="*{active}"><span class="custom-check"></span><span><strong>Available for plans</strong><small>Hidden templates cannot be selected in plans or invoices.</small></span></label></div>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Invoice template management</span>
+                    <h1 th:text="${formTitle}">Add bill template</h1>
+                    <p class="page-lede">The layout is chosen here; the text blocks around it are typed here. Saving an edit creates a new version — invoices already issued keep the version they were printed with.</p>
+                </div>
+                <div class="button-group">
+                    <a class="button button-quiet" th:href="@{/admin/templates}">Cancel</a>
+                    <a class="button" th:href="@{${previewUrl}(company='Northstar Studio')}" target="_blank" rel="noopener">Open full preview</a>
+                </div>
+            </section>
+
+            <p class="form-banner" th:if="${#fields.hasErrors('global')}" role="alert">
+                <span aria-hidden="true">!</span>
+                <span th:each="err : ${#fields.errors('global')}" th:text="${err}">The template could not be saved.</span>
+            </p>
+
+            <div class="form-with-preview">
+                <form method="post" th:action="@{${formAction}}" th:object="${templateForm}" novalidate>
+                    <details class="form-section" id="section-details" open>
+                        <summary><div><h2>Template details</h2><p>How it is named and where it sorts in the picker.</p></div></summary>
+                        <div class="form-section-body">
+                            <div class="form-grid">
+                                <div class="field">
+                                    <label for="name">Name <span class="field-required" aria-hidden="true">*</span></label>
+                                    <input id="name" type="text" maxlength="100" required th:field="*{name}" data-preview-field="name"
+                                           th:attr="aria-invalid=${#fields.hasErrors('name')}">
+                                    <span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}" role="alert"></span>
+                                </div>
+                                <div class="field">
+                                    <label for="code">Unique code <span class="field-required" aria-hidden="true">*</span></label>
+                                    <input id="code" type="text" maxlength="40" required pattern="[A-Za-z0-9_-]+" autocapitalize="characters"
+                                           th:field="*{code}" data-preview-field="code" th:attr="aria-invalid=${#fields.hasErrors('code')}">
+                                    <span class="field-help">Letters, digits, dash and underscore. Must be unique across live templates.</span>
+                                    <span class="field-error" th:if="${#fields.hasErrors('code')}" th:errors="*{code}" role="alert"></span>
+                                </div>
+                                <div class="field">
+                                    <label for="description">Description</label>
+                                    <textarea id="description" rows="2" maxlength="500" th:field="*{description}" data-preview-field="description"></textarea>
+                                </div>
+                                <div class="field">
+                                    <label for="style">Print layout <span class="field-required" aria-hidden="true">*</span></label>
+                                    <select id="style" th:field="*{style}" data-preview-field="style">
+                                        <option th:each="opt : ${styles}" th:value="${opt}" th:text="${opt.displayName + ' — ' + opt.description}">Classic</option>
+                                    </select>
+                                    <span class="field-help">Sets the header, table and totals arrangement used by the print and PDF renderers.</span>
+                                </div>
+                                <div class="field">
+                                    <label for="accentColor">Accent colour</label>
+                                    <div class="accent-picker-row">
+                                        <input id="accentColor" type="color" value="#17172f" th:field="*{accentColor}" data-preview-field="accentColor"
+                                               th:attr="aria-invalid=${#fields.hasErrors('accentColor')}">
+                                        <span class="field-help">Six-digit hex; blank falls back to the layout default <code>#17172f</code>.</span>
+                                    </div>
+                                    <span class="field-error" th:if="${#fields.hasErrors('accentColor')}" th:errors="*{accentColor}" role="alert"></span>
+                                </div>
+                                <div class="field">
+                                    <label for="sortOrder">Display order</label>
+                                    <input id="sortOrder" type="number" th:field="*{sortOrder}">
+                                </div>
+                                <div class="field">
+                                    <span class="field-label">Availability</span>
+                                    <label class="check-row" for="active"><input id="active" type="checkbox" th:field="*{active}">
+                                        <span>Active — plans may bundle this template</span></label>
+                                    <span class="field-help">Hiding it removes it from the plan picker and the invoice composer for new invoices only.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
+                    <details class="form-section" id="section-text" open>
+                        <summary><div><h2>Text blocks</h2><p>Header, footer, payment terms and notes printed on every invoice using this template.</p></div></summary>
+                        <div class="form-section-body">
+                            <div class="form-grid">
+                                <div class="field">
+                                    <label for="headerText">Header line</label>
+                                    <textarea id="headerText" rows="2" maxlength="500" th:field="*{headerText}" data-preview-field="headerText"
+                                              placeholder="TAX INVOICE — payment by bank transfer only"></textarea>
+                                    <span class="field-help">Shown under the company block.</span>
+                                </div>
+                                <div class="field">
+                                    <label for="footerText">Footer line</label>
+                                    <textarea id="footerText" rows="2" maxlength="500" th:field="*{footerText}" data-preview-field="footerText"
+                                              placeholder="Thank you for your business."></textarea>
+                                </div>
+                                <div class="field">
+                                    <label for="paymentTerms">Payment terms</label>
+                                    <textarea id="paymentTerms" rows="3" maxlength="500" th:field="*{paymentTerms}" data-preview-field="paymentTerms"
+                                              placeholder="Due within 14 days of the issue date."></textarea>
+                                </div>
+                                <div class="field">
+                                    <label for="termsAndConditions">Notes &amp; terms</label>
+                                    <textarea id="termsAndConditions" rows="6" maxlength="2000" th:field="*{termsAndConditions}" data-preview-field="termsAndConditions"
+                                              th:attr="aria-invalid=${#fields.hasErrors('termsAndConditions')}"
+                                              placeholder="Late payment interest, return policy, legal entity name…"></textarea>
+                                    <span class="field-help">Plain text; line breaks are preserved. No HTML is rendered.</span>
+                                    <span class="field-error" th:if="${#fields.hasErrors('termsAndConditions')}" th:errors="*{termsAndConditions}" role="alert"></span>
+                                </div>
+                            </div>
+                            <p class="form-banner is-info"><span aria-hidden="true">i</span>
+                                <span>Company details, the customer block, invoice number and dates, line items, tax, discount, subtotal and total are
+                                produced by the layout from invoice data — a template stores design text only, never customer data. The logo placeholder is
+                                filled from each account's company profile.</span></p>
+                        </div>
+                    </details>
+
+                    <div class="form-actions">
+                        <button class="button button-primary" type="submit" data-busy-label="Saving"><span aria-hidden="true">✓</span> Save template</button>
+                        <a class="button" th:href="@{/admin/templates}">Discard</a>
+                        <span class="spacer"></span>
+                        <span class="field-help" th:if="${entityId != null}">This template is at version <b th:text="'v' + ${templateVersion}">v1</b>; saving creates the next version.</span>
+                        <span class="field-help" th:unless="${entityId != null}">New templates start at version 1.</span>
+                    </div>
+
+                    <div class="preview-pane">
+                        <div class="preview-pane-head">
+                            <h2>Live preview</h2>
+                            <span class="field-help">Sample data, refreshed as you type — it never writes to the database.</span>
+                        </div>
+                        <iframe id="template-preview-frame" title="Template preview with sample data"
+                                th:attr="data-preview-url=${previewUrl}" th:src="@{${previewUrl}(company='Northstar Studio')}"></iframe>
+                    </div>
+                </form>
+            </div>
         </div>
-        <div class="global-errors" th:if="${#fields.hasGlobalErrors()}"><p th:each="err : ${#fields.globalErrors()}" th:text="${err}">Please check the template.</p></div>
-        <div class="form-actions"><a class="button button-quiet" th:href="@{/admin/templates}">Cancel</a><button class="button button-primary" type="submit">Save template <span>→</span></button></div>
-    </form>
-</div></main></div></body></html>
+    </main>
+</div>
+
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

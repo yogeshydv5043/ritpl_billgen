@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Job management')}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Job management</span>
+                    <h1>Background jobs</h1>
+                    <p class="page-lede">Bulk email is resolved into batch and recipient rows when the job is created, then processed one batch per transaction by the worker. No web request ever sends a large fan-out.</p>
+                </div>
+                <div class="button-group">
+                    <a class="button button-quiet" th:href="@{/admin/notifications}">Notification rules</a>
+                    <a class="button button-primary" th:href="@{/admin/jobs/new}"><span class="button-plus" aria-hidden="true">＋</span> Schedule a job</a>
+                </div>
+            </section>
+
+            <div class="stat-row">
+                <div class="stat"><b th:text="${counts.get('total')}">0</b><span>Total</span></div>
+                <div class="stat is-ok"><b th:text="${counts.get('running')}">0</b><span>Running</span></div>
+                <div class="stat is-warn"><b th:text="${counts.get('scheduled')}">0</b><span>Queued</span></div>
+                <div class="stat"><b th:text="${counts.get('completed')}">0</b><span>Completed</span></div>
+                <div class="stat" th:classappend="${counts.get('failed') != null and counts.get('failed') > 0 ? 'is-bad' : ''}"><b th:text="${counts.get('failed')}">0</b><span>Failed</span></div>
+                <div class="stat"><b th:text="${counts.get('paused')}">0</b><span>Paused</span></div>
+            </div>
+
+            <section class="panel list-panel">
+                <form class="filter-bar" method="get" th:action="@{/admin/jobs}">
+                    <div class="filter-field">
+                        <label for="job-status">Status</label>
+                        <select id="job-status" name="status">
+                            <option value="">Any status</option>
+                            <option th:each="item : ${statuses}" th:value="${item.name()}" th:text="${item.label}"
+                                    th:selected="${status != null and status == item.name()}">Pending</option>
+                        </select>
+                    </div>
+                    <div class="filter-field">
+                        <label for="job-q">Search</label>
+                        <input id="job-q" type="search" name="q" th:value="${q}" placeholder="Job name" autocomplete="off">
+                    </div>
+                    <div class="filter-actions">
+                        <button class="button button-primary button-small" type="submit">Apply</button>
+                        <a class="button button-quiet button-small" th:href="@{/admin/jobs}">Reset</a>
+                    </div>
+                </form>
+                <div class="list-toolbar">
+                    <div class="list-count"><span class="count-dot" aria-hidden="true"></span>
+                        <strong th:text="${page.totalElements}">0</strong> job(s) in view</div>
+                    <p class="toolbar-note" th:if="${attention != null and attention > 0}">
+                        <span class="badge status-failed" th:text="${attention} + ' need attention'">0 need attention</span></p>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th scope="col">ID</th><th scope="col">Name</th><th scope="col">Type</th>
+                            <th scope="col">Trigger</th><th scope="col">Scheduled for</th><th scope="col">Targets</th>
+                            <th scope="col">Batch size</th><th scope="col">Progress</th>
+                            <th scope="col">Processed / ok / failed</th><th scope="col">Status</th><th scope="col">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="job : ${page.content}">
+                            <td><span class="table-id" th:text="'#' + ${job.id}">#0</span></td>
+                            <td><a class="table-primary" th:href="@{/admin/jobs/{id}(id=${job.id})}" th:text="${job.name}">Expiry sweep</a>
+                                <span class="table-secondary" th:text="${job.createdBy != null ? 'by ' + job.createdBy : ''}">by</span></td>
+                            <td><span class="badge badge-muted" th:text="${job.jobType.label}">General customer email</span>
+                                <span class="table-secondary" th:if="${job.jobType.sendsCustomerCommunication}">customer-facing</span></td>
+                            <td th:text="${job.triggerType.label + (job.recurrence.name() == 'NONE' ? '' : ' · ' + job.recurrence.label)}">Manual</td>
+                            <td class="nowrap"><span class="table-primary" th:text="${job.runAt}">2026-01-01T08:00Z</span>
+                                <span class="table-secondary" th:if="${job.startedAt != null}" th:text="'started ' + ${job.startedAt}">started</span></td>
+                            <td><strong th:text="${job.eligibleCount}">0</strong><span class="table-secondary" th:text="${job.batchCount} + ' batch(es)'">0 batches</span></td>
+                            <td th:text="${job.batchSize}">100</td>
+                            <td>
+                                <div th:replace="~{fragments/components :: progress(${job.progressPercent}, 100, ${job.failedCount > 0 ? 'bad' : (job.progressPercent >= 100 ? 'ok' : '')})}"></div>
+                            </td>
+                            <td><span class="kv-inline"><b th:text="${job.processedCount}">0</b> processed ·
+                                <b th:text="${job.successCount}">0</b> ok · <b th:text="${job.failedCount}">0</b> failed</span></td>
+                            <td><span class="badge"
+                                     th:classappend="${job.status.name() == 'COMPLETED' ? 'status-completed' : (job.status.name() == 'RUNNING' ? 'status-running' : (job.status.name() == 'FAILED' ? 'status-failed' : (job.status.name() == 'PARTIALLY_FAILED' ? 'status-failed' : (job.status.name() == 'PAUSED' ? 'status-paused' : (job.status.name() == 'CANCELLED' ? 'status-cancelled' : 'status-pending')))))}"
+                                     th:text="${job.status.label}">Pending</span></td>
+                            <td>
+                                <div class="row-actions">
+                                    <a class="row-arrow" th:href="@{/admin/jobs/{id}(id=${job.id})}" title="Monitor job"
+                                       th:attr="aria-label='Monitor ' + ${job.name}">→</a>
+                                    <form method="post" th:action="@{/admin/jobs/{id}/run(id=${job.id})}" th:if="${job.status.name() == 'PENDING' or job.status.name() == 'SCHEDULED' or job.status.name() == 'PAUSED'}">
+                                        <button class="button button-primary button-small" type="submit">Run now</button>
+                                    </form>
+                                    <form method="post" th:action="@{/admin/jobs/{id}/pause(id=${job.id})}" th:if="${job.status.name() == 'RUNNING' or job.status.name() == 'SCHEDULED'}"
+                                          th:attr="data-confirm-title='Pause this job?',
+                                                   data-confirm-text='Batches already claimed finish; the rest wait. Nothing is lost and nothing is re-sent.'">
+                                        <button class="button button-quiet button-small" type="submit">Pause</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(page.content)}"><td colspan="11">
+                            <div th:replace="~{fragments/components :: empty('◷', 'No jobs match this view', 'Schedule a job to send a notification to a resolved audience in batches, or to run the audit retention purge. Bulk work never runs inside a web request.', 'Schedule a job', '/admin/jobs/new')}"></div>
+                        </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div th:replace="~{fragments/components :: pagination(${page}, '/admin/jobs', ${currentQuery})}"></div>
+            </section>
+
+            <footer class="page-footer">
+                <span>The worker drains a bounded number of batches per pass and re-arms itself while rows remain queued.</span>
+                <span th:text="'worker enabled: ' + ${jobWorkerEnabled}">worker</span>
+            </footer>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

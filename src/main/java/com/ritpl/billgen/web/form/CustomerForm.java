@@ -22,6 +22,12 @@ public class CustomerForm {
     @Size(max=100) private String password;
     private boolean loginEnabled = true;
     private boolean loginExists;
+    /** Account availability, edited alongside the profile. */
+    private String status = "ACTIVE";
+    /** Optional subscription assignment at creation time. */
+    private Long planId;
+    private java.time.LocalDate startedOn;
+    private java.time.LocalDate endsOn;
 
     public static CustomerForm from(Customer customer, AppUser login) {
         CustomerForm form = new CustomerForm();
@@ -35,6 +41,7 @@ public class CustomerForm {
         form.postalCode = customer.getPostalCode();
         form.country = customer.getCountry();
         form.gstin = customer.getGstin();
+        form.status = customer.getStatus().name();
         if (login != null) {
             form.loginExists = true;
             form.loginEmail = login.getEmail();
@@ -65,4 +72,9 @@ public class CustomerForm {
     public String getPassword(){return password;} public void setPassword(String v){password=v;}
     public boolean isLoginEnabled(){return loginEnabled;} public void setLoginEnabled(boolean v){loginEnabled=v;}
     public boolean isLoginExists(){return loginExists;}
+    public String getStatus(){return status;} public void setStatus(String v){status=v;}
+    public Long getPlanId(){return planId;} public void setPlanId(Long v){planId=v;}
+    public java.time.LocalDate getStartedOn(){return startedOn;} public void setStartedOn(java.time.LocalDate v){startedOn=v;}
+    public java.time.LocalDate getEndsOn(){return endsOn;} public void setEndsOn(java.time.LocalDate v){endsOn=v;}
+    public boolean isDisabled(){return "DISABLED".equalsIgnoreCase(status);}
 }

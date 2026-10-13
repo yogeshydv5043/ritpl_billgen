@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Deleted accounts')}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Customer management</span>
+                    <h1>Deleted accounts</h1>
+                    <p class="page-lede">Deletion is soft: invoices, products, subscription history and audit records are all preserved. Restoring returns the account disabled so you control when it can sign in again.</p>
+                </div>
+                <div class="button-group"><a class="button" th:href="@{/customers}">Back to live accounts</a></div>
+            </section>
+
+            <section class="panel list-panel">
+                <div class="list-toolbar">
+                    <div class="list-count"><span class="count-dot count-dot-muted" aria-hidden="true"></span>
+                        <strong th:text="${accounts != null ? #lists.size(accounts) : 0}">0</strong> deleted account(s)</div>
+                    <p class="toolbar-note">Deleted accounts never appear in the standard list, dashboards or reports.</p>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th scope="col">ID</th><th scope="col">Company name</th><th scope="col">Billing email</th>
+                            <th scope="col">Deleted on</th><th scope="col">Deleted by</th><th scope="col">Reason</th>
+                            <th scope="col">Invoices kept</th><th scope="col">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="row : ${accounts}">
+                            <td><span class="table-id" th:text="'#' + ${row.customerId}">#0</span></td>
+                            <td><a class="customer-cell" th:href="@{/customers/{id}(id=${row.customerId})}">
+                                <span class="customer-cell-copy"><strong th:text="${row.companyName}">Company</strong>
+                                <small>Deleted account</small></span></a></td>
+                            <td th:text="${row.email}">a@b.test</td>
+                            <td class="nowrap"><span class="table-primary" th:text="${row.deletedAt != null ? row.deletedAt : '—'}">date</span>
+                                <span class="table-secondary">UTC</span></td>
+                            <td th:text="${row.deletedBy != null ? row.deletedBy : '—'}">admin</td>
+                            <td class="wrap-cell" th:text="${row.deletionReason != null ? row.deletionReason : 'No reason recorded'}">—</td>
+                            <td th:text="${row.invoiceCount != null ? row.invoiceCount : '—'}">0</td>
+                            <td>
+                                <div class="row-actions">
+                                    <a class="row-arrow" th:href="@{/customers/{id}(id=${row.customerId})}" title="View account"
+                                       th:attr="aria-label='Open deleted account ' + ${row.companyName}">→</a>
+                                    <form method="post" th:action="@{/customers/{id}/restore(id=${row.customerId})}"
+                                          th:attr="data-confirm-title='Restore this account?',
+                                                   data-confirm-text=${'It returns with all invoices, products and audit history intact, and stays disabled until you enable it.'},
+                                                   data-confirm-check='I will review the account before enabling it.'">
+                                        <button class="button button-primary button-small" type="submit">Restore</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr th:if="${accounts == null or #lists.isEmpty(accounts)}"><td colspan="8">
+                            <div th:replace="~{fragments/components :: empty('◫', 'Nothing has been deleted', 'Soft-deleted customer accounts land here with their deletion timestamp, author and reason. No records are ever removed.', null, null)}"></div>
+                        </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <footer class="page-footer">
+                <span>Physical deletion is not offered in this release — see <code>docs/architecture.md</code>.</span>
+            </footer>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

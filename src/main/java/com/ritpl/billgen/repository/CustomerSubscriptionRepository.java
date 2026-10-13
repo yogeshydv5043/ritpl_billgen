@@ -22,6 +22,17 @@ public interface CustomerSubscriptionRepository extends JpaRepository<CustomerSu
     long countByPlan_IdAndStatus(Long planId, SubscriptionStatus status);
 
     List<CustomerSubscription> findByStatus(SubscriptionStatus status);
+    List<CustomerSubscription> findTop10ByOrderByCreatedAtDesc();
+    long countByStatus(SubscriptionStatus status);
+    long countByStatusAndEndsOnBetween(SubscriptionStatus status, java.time.LocalDate from, java.time.LocalDate until);
+
+    /** Accounts that currently hold a live term, for the "with a current subscription" KPI. */
+    @Query("select count(distinct s.customer.id) from CustomerSubscription s where s.status = :status")
+    long countAccountsSubscribed(@Param("status") SubscriptionStatus status);
+
+    @EntityGraph(attributePaths = {"customer", "plan"})
+    @Query("select s from CustomerSubscription s where s.status = :status order by s.createdAt desc")
+    List<CustomerSubscription> findAllWithCustomer(@Param("status") SubscriptionStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from CustomerSubscription s join fetch s.plan where s.customer.id = :customerId and s.status = :status")

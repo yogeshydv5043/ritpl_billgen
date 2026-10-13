@@ -65,6 +65,7 @@ import com.ritpl.billgen.service.TemplateService;
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(properties = {
         "app.demo.seed-enabled=false",
+        "app.jobs.enabled=false",
         "spring.session.store-type=none",
         "spring.cache.type=none",
         "app.subscription.time-zone=UTC",

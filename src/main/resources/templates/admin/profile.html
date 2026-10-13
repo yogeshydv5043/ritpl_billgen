@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Profile and settings')}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content page-content-narrow">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Administration</span>
+                    <h1>Profile and settings</h1>
+                    <p class="page-lede">Your own credentials and what the console is currently configured to do. Nothing here changes another tenant's records.</p>
+                </div>
+            </section>
+
+            <div class="grid-2">
+                <section class="panel">
+                    <div class="panel-heading"><div><span class="kicker">SIGNED IN AS</span><h2>Account</h2></div></div>
+                    <div class="panel-body">
+                        <dl class="grid-kv">
+                            <dt>Email</dt><dd th:text="${email}">admin@example.com</dd>
+                            <dt>Role</dt><dd><span class="badge badge-info" th:text="${role}">ROLE_ADMIN</span>
+                                <span class="table-secondary">Displayed as Super Administrator in this console</span></dd>
+                            <dt>Sign-out</dt><dd>POST to the logout endpoint invalidates the session; sessions are stored in Redis and expire after 30 idle minutes.</dd>
+                        </dl>
+                        <form class="stack-form" method="post" th:action="@{/admin/profile/password}"
+                              th:attr="data-confirm-title='Change your own password?',
+                                       data-confirm-text='Your current session keeps working; other sessions are unaffected until they expire.'">
+                            <div class="form-grid">
+                                <div class="field">
+                                    <label for="currentPassword">Current password <span class="field-required" aria-hidden="true">*</span></label>
+                                    <input id="currentPassword" name="currentPassword" type="password" maxlength="200" required autocomplete="current-password"
+                                           aria-describedby="password-help">
+                                </div>
+                                <div class="field">
+                                    <label for="newPassword">New password <span class="field-required" aria-hidden="true">*</span></label>
+                                    <input id="newPassword" name="newPassword" type="password" maxlength="200" required autocomplete="new-password"
+                                           aria-describedby="password-help">
+                                </div>
+                            </div>
+                            <span class="field-help" id="password-help">At least 10 characters. Passwords are hashed with BCrypt and are never shown, exported or written to the audit trail.</span>
+                            <div class="form-actions">
+                                <button class="button button-primary button-small" type="submit" data-busy-label="Updating">Change password</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-heading"><div><span class="kicker">CONFIGURED</span><h2>What the console points at</h2></div></div>
+                    <div class="panel-body">
+                        <dl class="grid-kv">
+                            <dt>Active plans</dt><dd th:text="${planCount} + ' available to customers'">0</dd>
+                            <dt>Active templates</dt><dd th:text="${templateCount}">0</dd>
+                            <dt>Active notification rules</dt><dd th:text="${notificationCount}">0</dd>
+                            <dt>Expiry reminders</dt><dd th:text="${expiryReminders}">30, 7, 3, 1 days before term end</dd>
+                            <dt>Mail transport</dt><dd><span class="badge" th:classappend="${mailTransport != null and mailTransport.startsWith('SMTP') ? 'status-active' : 'status-draft'}"
+                                    th:text="${mailTransport}">Recording only</span>
+                                <span class="table-secondary">Until an SMTP host is configured, email sends are recorded as simulated rather than dropped.</span></dd>
+                        </dl>
+                    </div>
+                </section>
+            </div>
+
+            <section class="panel">
+                <div class="panel-heading"><div><span class="kicker">INTERFACE</span><h2>Preferences stored on this device</h2></div>
+                    <span class="field-help">Not server-side settings</span></div>
+                <div class="panel-body">
+                    <p class="section-note">These two controls are deliberately browser-local: they change only how the console looks for you and are written to <code>localStorage</code>, not to your account. There is no per-user server-side preference table in this release, so a different device starts from the defaults.</p>
+                    <div class="switch-row">
+                        <button class="button button-quiet" type="button" onclick="BillGen.toggleTheme()"><span aria-hidden="true">◐</span> Switch light / dark</button>
+                        <button class="button button-quiet" type="button" onclick="BillGen.toggleSidebar()"><span aria-hidden="true">⇤</span> Collapse / expand navigation</button>
+                    </div>
+                </div>
+            </section>
+
+            <footer class="page-footer">
+                <span>Your own administrative actions are recorded in the audit trail, including this password change.</span>
+                <a th:href="@{/admin/audit}">My recent actions <span aria-hidden="true">→</span></a>
+            </footer>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

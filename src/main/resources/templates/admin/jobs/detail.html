@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(${job.name})}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="profile-head-card">
+                <div class="profile-identity">
+                    <span class="profile-avatar" aria-hidden="true">◷</span>
+                    <div class="profile-identity-copy">
+                        <span class="kicker">Job <span th:text="'#' + ${job.id}">#0</span> · created <span th:text="${job.createdBy != null ? job.createdBy : 'system'}">admin</span></span>
+                        <h1 th:text="${job.name}">October expiry reminders</h1>
+                        <p th:text="${job.description != null ? job.description : 'No note recorded for this run.'}">note</p>
+                        <p class="badge-row">
+                            <span class="badge"
+                                  th:classappend="${job.status.name() == 'COMPLETED' ? 'status-completed' : (job.status.name() == 'RUNNING' ? 'status-running' : (job.status.name() == 'FAILED' ? 'status-failed' : (job.status.name() == 'PARTIALLY_FAILED' ? 'status-failed' : (job.status.name() == 'PAUSED' ? 'status-paused' : (job.status.name() == 'CANCELLED' ? 'status-cancelled' : 'status-pending')))))}"
+                                  th:text="${job.status.label}">Pending</span>
+                            <span class="badge badge-muted" th:text="${job.jobType.label}">General customer email</span>
+                            <span class="badge badge-soft" th:text="${job.triggerType.label}">Manual</span>
+                            <span class="badge badge-soft" th:text="'recurrence: ' + ${job.recurrence.label}">Once</span>
+                            <span class="badge badge-info" th:if="${job.jobType.sendsCustomerCommunication}">customer-facing</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="profile-actions">
+                    <form method="post" th:action="@{/admin/jobs/{id}/run(id=${job.id})}" th:if="${job.status.name() == 'PENDING' or job.status.name() == 'SCHEDULED' or job.status.name() == 'PAUSED'}">
+                        <button class="button button-primary" type="submit">Run now</button>
+                    </form>
+                    <form method="post" th:action="@{/admin/jobs/{id}/pause(id=${job.id})}" th:if="${job.status.name() == 'RUNNING' or job.status.name() == 'SCHEDULED'}"
+                          th:attr="data-confirm-title='Pause this job?',
+                                   data-confirm-text='The batch currently claimed finishes; the rest wait until it is resumed. No recipient is sent to twice.'">
+                        <button class="button button-quiet" type="submit">Pause</button>
+                    </form>
+                    <form method="post" th:action="@{/admin/jobs/{id}/resume(id=${job.id})}" th:if="${job.status.name() == 'PAUSED'}">
+                        <button class="button button-primary" type="submit">Resume</button>
+                    </form>
+                    <form method="post" th:action="@{/admin/jobs/{id}/retry(id=${job.id})}" th:if="${job.failedCount > 0}"
+                          th:attr="data-confirm-title=${'Retry ' + job.failedCount + ' failed recipient(s)?'},
+                                   data-confirm-text='Only recipients whose last attempt failed are requeued. Anyone already reached is skipped by their idempotency key, so nobody gets a duplicate.' + (job.jobType.sendsCustomerCommunication ? ' This job sends email to customers.' : ''),
+                                   data-confirm-check=${job.jobType.sendsCustomerCommunication ? 'I understand this emails customers again.' : ''}">
+                        <input type="hidden" name="confirmed" value="true">
+                        <button class="button button-secondary" type="submit">Retry failed</button>
+                    </form>
+                    <form method="post" th:action="@{/admin/jobs/{id}/cancel(id=${job.id})}" th:if="${!job.status.terminal}"
+                          th:attr="data-confirm-title='Cancel this job?',
+                                   data-confirm-text=${'Undelivered batches stop and ' + job.eligibleCount + ' recipient(s) will not be contacted. Sent rows stay as they are.' + (job.jobType.sendsCustomerCommunication ? ' This is a customer-facing job.' : '')},
+                                   data-confirm-check='I understand recipients will not be contacted by this job.'">
+                        <input type="hidden" name="confirmed" value="true">
+                        <button class="button button-danger" type="submit">Cancel job</button>
+                    </form>
+                    <a class="button button-quiet" th:href="@{/admin/jobs}">All jobs</a>
+                </div>
+            </section>
+
+            <div class="stat-row">
+                <div class="stat"><b th:text="${job.eligibleCount}">0</b><span>Eligible</span></div>
+                <div class="stat"><b th:text="${job.batchCount}">0</b><span>Batches</span></div>
+                <div class="stat"><b th:text="${job.processedCount}">0</b><span>Processed</span></div>
+                <div class="stat is-ok"><b th:text="${job.successCount}">0</b><span>Delivered</span></div>
+                <div class="stat" th:classappend="${job.failedCount > 0 ? 'is-bad' : ''}"><b th:text="${job.failedCount}">0</b><span>Failed</span></div>
+                <div class="stat"><b th:text="'1:' + ${job.batchSize}">1:100</b><span>Batch size</span></div>
+                <div class="stat"><b th:text="${job.retryLimit}">0</b><span>Retries</span></div>
+                <div class="stat"><b th:text="'+' + ${job.priority}">5</b><span>Priority</span></div>
+            </div>
+
+            <div class="progress-card">
+                <div th:replace="~{fragments/components :: progress(${job.progressPercent}, 100, ${job.failedCount > 0 ? 'bad' : (job.progressPercent >= 100 ? 'ok' : '')})}"></div>
+                <span class="field-help" th:text="${job.progressPercent} + '% processed · scheduled for ' + ${job.runAt}">progress</span>
+            </div>
+
+            <div class="grid-2">
+                <section class="panel">
+                    <div class="panel-heading"><div><span class="kicker">EXECUTION LOG</span><h2>Batches <span class="heading-count" th:text="${#lists.size(batches)}">0</span></h2></div>
+                        <span class="field-help">Claimed one at a time with <code>FOR UPDATE SKIP LOCKED</code>.</span></div>
+                    <div class="table-wrap">
+                        <table class="mini-table">
+                            <thead><tr><th scope="col">#</th><th scope="col">Range</th><th scope="col">Items</th><th scope="col">Ok</th><th scope="col">Failed</th><th scope="col">Attempts</th><th scope="col">Status</th><th scope="col">Finished</th></tr></thead>
+                            <tbody>
+                            <tr th:each="batch : ${batches}">
+                                <td th:text="${batch.batchNumber}">1</td>
+                                <td><span class="table-secondary" style="margin-top:0" th:text="${batch.offsetIndex + ' → ' + (batch.offsetIndex + batch.itemCount)}">0 → 100</span></td>
+                                <td th:text="${batch.itemCount}">0</td>
+                                <td th:text="${batch.successCount}">0</td>
+                                <td th:text="${batch.failedCount}">0</td>
+                                <td th:text="${batch.attempts}">0</td>
+                                <td><span class="badge"
+                                          th:classappend="${batch.status.name() == 'COMPLETED' ? 'status-completed' : (batch.status.name() == 'RUNNING' ? 'status-running' : (batch.status.name() == 'FAILED' ? 'status-failed' : (batch.status.name() == 'CANCELLED' ? 'status-cancelled' : (batch.status.name() == 'PAUSED' ? 'status-paused' : 'status-pending'))))}"
+                                          th:text="${batch.status.label}">Pending</span>
+                                    <span class="table-secondary" th:if="${batch.lastError != null}" th:text="${batch.lastError}">error</span></td>
+                                <td class="nowrap" th:text="${batch.finishedAt != null ? batch.finishedAt : '—'}">—</td>
+                            </tr>
+                            <tr th:if="${#lists.isEmpty(batches)}"><td colspan="8"><div class="empty-inline">No batches recorded yet.</div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-heading"><div><span class="kicker">SETTINGS</span><h2>How this job is configured</h2></div></div>
+                    <div class="panel-body">
+                        <dl class="grid-kv">
+                            <dt>Scheduled for</dt><dd th:text="${job.runAt}">—</dd>
+                            <dt>Started / finished</dt><dd><span th:text="${job.startedAt != null ? job.startedAt : 'not started'}">—</span> · <span th:text="${job.finishedAt != null ? job.finishedAt : 'open'}">—</span></dd>
+                            <dt>Target filter</dt><dd><code th:if="${job.targetFilter != null}" th:text="${job.targetFilter}">filter</code><span th:if="${job.targetFilter == null}">Notification rule recipients</span></dd>
+                            <dt>Notification</dt><dd th:if="${job.notificationId != null}">#<span th:text="${job.notificationId}">0</span>
+                                <a class="text-link" th:href="@{/admin/notifications/{id}/edit(id=${job.notificationId})}">open rule <span aria-hidden="true">→</span></a></dd>
+                                <dd th:if="${job.notificationId == null}">—</dd>
+                            <dt>Batch size / retries</dt><dd th:text="${job.batchSize} + ' recipients per batch · up to ' + ${job.retryLimit} + ' retries after ' + ${job.retryDelayMinutes} + ' min'">—</dd>
+                            <dt>Row history</dt><dd>Batch and recipient rows are kept after the job finishes, so a completed run stays auditable.</dd>
+                        </dl>
+                    </div>
+                </section>
+            </div>
+
+            <section class="panel list-panel">
+                <div class="panel-heading"><div><span class="kicker">PER-RECIPIENT RESULTS</span><h2>Recipients <span class="heading-count" th:text="${recipients.totalElements}">0</span></h2></div>
+                    <form class="filter-bar" method="get" th:action="@{/admin/jobs/{id}(id=${job.id})}">
+                        <div class="filter-field">
+                            <label for="recipient-status">Result</label>
+                            <select id="recipient-status" name="recipientStatus">
+                                <option value="">Every recipient</option>
+                                <option value="PENDING" th:selected="${recipientStatus == 'PENDING'}">Pending</option>
+                                <option value="SENT" th:selected="${recipientStatus == 'SENT'}">Sent</option>
+                                <option value="SIMULATED" th:selected="${recipientStatus == 'SIMULATED'}">Recorded (no transport)</option>
+                                <option value="FAILED" th:selected="${recipientStatus == 'FAILED'}">Failed</option>
+                                <option value="SKIPPED" th:selected="${recipientStatus == 'SKIPPED'}">Skipped (already delivered)</option>
+                                <option value="RETRY_SCHEDULED" th:selected="${recipientStatus == 'RETRY_SCHEDULED'}">Retry scheduled</option>
+                            </select>
+                        </div>
+                        <div class="filter-actions"><button class="button button-small" type="submit">Apply</button></div>
+                    </form>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th scope="col">Recipient</th><th scope="col">Account</th><th scope="col">Subject</th><th scope="col">Result</th><th scope="col">Attempts</th><th scope="col">Sent / failed</th><th scope="col">Detail</th></tr></thead>
+                        <tbody>
+                        <tr th:each="row : ${recipients.content}">
+                            <td><span class="table-primary" th:text="${row.recipient}">a@b.test</span>
+                                <span class="table-secondary" th:text="'batch #' + ${row.batch != null ? row.batch.batchNumber : '—'}">batch</span></td>
+                            <td><a class="text-link" th:if="${row.customerId != null}" th:href="@{/customers/{id}(id=${row.customerId})}" th:text="${row.customer != null ? row.customer.companyName : '#' + row.customerId}">Company</a>
+                                <span th:if="${row.customerId == null}" class="table-secondary">Administrator</span></td>
+                            <td class="wrap-cell" th:text="${row.subject}">subject</td>
+                            <td><span class="badge"
+                                      th:classappend="${row.status.name() == 'SENT' ? 'status-sent' : (row.status.name() == 'SIMULATED' ? 'status-draft' : (row.status.name() == 'FAILED' ? 'status-failed' : (row.status.name() == 'SKIPPED' ? 'status-skipped' : (row.status.name() == 'RETRY_SCHEDULED' ? 'status-pending' : 'status-scheduled'))))}"
+                                      th:text="${row.status.label}">Sent</span></td>
+                            <td th:text="${row.attempts}">0</td>
+                            <td class="nowrap" th:text="${row.sentAt != null ? row.sentAt : '—'}">—</td>
+                            <td class="wrap-cell"><span th:if="${row.lastError != null}" class="table-error-cell" th:text="${row.lastError}">error</span>
+                                <span th:if="${row.lastError == null}" class="table-secondary" th:text="'key: ' + ${row.idempotencyKey}">key</span></td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(recipients.content)}"><td colspan="7">
+                            <div th:replace="~{fragments/components :: empty('◌', 'No recipient rows for this filter', 'Every eligible account gets a row when the job is created. Change the filter to see the others, or wait for the worker to start the first batch.', null, null)}"></div>
+                        </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div th:replace="~{fragments/components :: pagination(${recipients}, '/admin/jobs/' + job.id, ${currentQuery})}"></div>
+            </section>
+
+            <footer class="page-footer">
+                <span th:text="'Mail transport in this deployment: ' + ${mailTransport}">transport</span>
+                <a th:href="@{/admin/notifications/history}">Delivery history <span aria-hidden="true">→</span></a>
+            </footer>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

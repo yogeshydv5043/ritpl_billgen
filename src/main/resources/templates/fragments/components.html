@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<!-- ========================================================== reusable parts
+     Every module composes these fragments so a table, a badge, an empty state
+     or a confirmation dialog looks and behaves the same everywhere.
+     ======================================================================= -->
+
+<!-- status badge: the colour class is derived from the value, so a new status
+     added to an enum is still rendered sensibly without touching CSS -->
+<span th:fragment="badge(value)" class="badge"
+      th:classappend="'status-' + ${#strings.toLowerCase(#strings.replace(#strings.toString(value), '_', '-'))}"
+      th:text="${value}">Status</span>
+
+<span th:fragment="badgeText(value, label)" class="badge"
+      th:classappend="'status-' + ${#strings.toLowerCase(#strings.replace(#strings.toString(value), '_', '-'))}"
+      th:text="${label}">Status</span>
+
+<!-- KPI card: icon, label, value, optional comparison, and the list it opens -->
+<a th:fragment="kpi(href, icon, label, value, note, trend, tone)" class="metric-card" th:href="@{${href}}"
+   th:classappend="${tone == 'highlight' ? ' metric-highlight' : ''}">
+    <span class="metric-top">
+        <span class="metric-icon icon-violet" aria-hidden="true" th:text="${icon}">◧</span>
+        <span class="metric-trend" th:if="${trend != null}"
+              th:classappend="${trend > 0 ? ' is-up' : (trend < 0 ? ' is-down' : ' is-flat')}"
+              th:text="${trend > 0 ? '+' + trend : (trend < 0 ? '' + trend : 'no change')}">+3</span>
+    </span>
+    <span class="metric-label" th:text="${label}">Metric</span>
+    <span class="metric-value"><span th:text="${value}">0</span></span>
+    <span class="metric-foot" th:if="${note != null}"><span th:text="${note}">note</span><span class="row-arrow" aria-hidden="true">→</span></span>
+</a>
+
+<!-- pagination that keeps the current filter query (params must start with '&') -->
+<nav th:fragment="pagination(page, baseUrl, params)" class="pagination"
+     th:if="${page != null and page.totalPages > 0}" aria-label="Pagination"
+     th:with="ctxPath=${contextPath != null ? contextPath : ''}, query=${params != null ? params : ''},
+              from=${page.number - 1 < 0 ? 0 : page.number - 1},
+              to=${page.number + 1 > page.totalPages - 1 ? page.totalPages - 1 : page.number + 1}">
+    <span th:text="'Showing ' + ${page.numberOfElements} + ' of ' + ${page.totalElements} + ' result(s)'">Showing 0 of 0</span>
+    <span th:if="${page.totalPages > 1}" th:text="'· page ' + ${page.number + 1} + ' of ' + ${page.totalPages}"></span>
+    <div class="pagination-links" th:if="${page.totalPages > 1}">
+        <a th:if="${page.hasPrevious()}" th:href="${ctxPath + baseUrl + '?page=' + (page.number - 1) + query}" aria-label="Previous page">‹</a>
+        <span th:unless="${page.hasPrevious()}" aria-disabled="true">‹</span>
+        <a th:if="${page.number > 1}" th:href="${ctxPath + baseUrl + '?page=0' + query}" aria-label="First page">1</a>
+        <span th:if="${page.number > 2}" class="is-gap" aria-hidden="true">…</span>
+        <th:block th:each="index : ${#numbers.sequence(from, to)}">
+            <span th:if="${index == page.number}" class="is-current" th:text="${index + 1}" aria-current="page">2</span>
+            <a th:unless="${index == page.number}" th:href="${ctxPath + baseUrl + '?page=' + index + query}"
+               th:text="${index + 1}" th:attr="aria-label='Page ' + ${index + 1}">3</a>
+        </th:block>
+        <span th:if="${page.number < page.totalPages - 3}" class="is-gap" aria-hidden="true">…</span>
+        <a th:if="${page.number < page.totalPages - 2}" th:href="${ctxPath + baseUrl + '?page=' + (page.totalPages - 1) + query}"
+           th:text="${page.totalPages}" aria-label="Last page">9</a>
+        <a th:if="${page.hasNext()}" th:href="${ctxPath + baseUrl + '?page=' + (page.number + 1) + query}" aria-label="Next page">›</a>
+        <span th:unless="${page.hasNext()}" aria-disabled="true">›</span>
+    </div>
+</nav>
+
+<!-- states -->
+<div th:fragment="empty(icon, title, text, ctaText, ctaHref)" class="empty-state">
+    <span class="empty-icon" aria-hidden="true" th:text="${icon}">◇</span>
+    <h2 th:text="${title}">Nothing here yet</h2>
+    <p th:text="${text}">No records match this view.</p>
+    <a th:if="${ctaText != null and ctaText != ''}" class="button button-primary button-small" th:href="@{${ctaHref}}" th:text="${ctaText}">Create</a>
+</div>
+
+<div th:fragment="loading(rows)" class="widget-loading" aria-busy="true">
+    <span class="visually-hidden">Loading rows</span>
+    <div class="skeleton-row" th:each="row : ${#numbers.sequence(1, rows)}">
+        <span class="skeleton" style="width:70%"></span>
+        <span class="skeleton" style="width:44%"></span>
+        <span class="skeleton" style="width:36%"></span>
+        <span class="skeleton" style="width:24%"></span>
+    </div>
+</div>
+
+<div th:fragment="error(text, retryHref)" class="widget-error" role="alert">
+    <span aria-hidden="true">!</span>
+    <span th:text="${text}">This widget could not be loaded.</span>
+    <a th:if="${retryHref != null}" class="text-link" th:href="@{${retryHref}}">Retry <span>→</span></a>
+</div>
+
+<div th:fragment="progress(value, max, tone)" class="progress"
+     th:with="capped=${max != null and max > 0 ? (value * 100 / max > 100 ? 100 : value * 100 / max) : 0}">
+    <span class="progress-track">
+        <span class="progress-fill"
+              th:classappend="${tone != null ? 'is-' + tone : (capped >= 100 ? 'is-bad' : (capped >= 80 ? 'is-warn' : ''))}"
+              th:style="'width:' + ${capped} + '%'"></span>
+    </span>
+    <span class="progress-value" th:text="${max != null and max > 0} ? ${value} + '/' + ${max} : ${value}">0</span>
+</div>
+
+<!-- activity timeline: items are maps with title / meta / text / tone keys -->
+<ol th:fragment="timeline(items)" class="timeline">
+    <li th:each="item : ${items}">
+        <span class="node" th:classappend="${item.tone != null ? 'is-' + item.tone : ''}"></span>
+        <div>
+            <div class="timeline-head">
+                <strong th:text="${item.title}">Event</strong>
+                <time th:if="${item.meta != null}" th:text="${item.meta}">2 minutes ago</time>
+            </div>
+            <p th:if="${item.text != null}" th:text="${item.text}">Detail</p>
+        </div>
+    </li>
+    <li th:if="${items == null or #lists.isEmpty(items)}">
+        <span class="node is-muted"></span>
+        <div><p>No recorded activity for this view.</p></div>
+    </li>
+</ol>
+
+<!-- job execution log -->
+<pre th:fragment="log(lines)" class="log-view" tabindex="0" aria-label="Execution log"><span
+     th:each="line : ${lines}" th:text="${line}">12:04:11 batch 1 claimed</span></pre>
+
+<!-- key/value facts used across detail pages -->
+<dl th:fragment="facts(pairs)" class="grid-kv">
+    <th:block th:each="pair : ${pairs}">
+        <dt th:text="${pair.key}">Label</dt>
+        <dd th:text="${pair.value}">Value</dd>
+    </th:block>
+</dl>
+
+<!-- confirmation dialog. A form opts in with data-confirm-title / data-confirm-text,
+     so a destructive action is never a single unguarded click. -->
+<dialog th:fragment="confirmHost" class="confirm-dialog" id="billgen-confirm" aria-labelledby="confirm-title">
+    <div class="modal-body">
+        <h2 class="modal-title" id="confirm-title">Are you sure?</h2>
+        <p class="modal-text" id="confirm-text">This changes data other people rely on.</p>
+        <label class="check-row" id="confirm-check-row" hidden>
+            <input type="checkbox" id="confirm-check">
+            <span id="confirm-check-label">I understand and want to continue.</span>
+        </label>
+    </div>
+    <div class="modal-foot">
+        <button type="button" class="button button-secondary" onclick="BillGen.closeConfirm()">Cancel</button>
+        <button type="button" class="button button-danger" id="confirm-go" onclick="BillGen.confirmSubmit()">Confirm</button>
+    </div>
+</dialog>
+
+<div th:fragment="toastHost" class="toast-host" id="billgen-toasts" aria-live="polite"></div>
+</body>
+</html>

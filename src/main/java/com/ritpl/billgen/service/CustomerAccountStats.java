@@ -10,6 +10,16 @@ public record CustomerAccountStats(Long customerId, String companyName, String c
         long invoiceCount, long invoiceLimit, long invoicesUsed, long remainingInvoices,
         long productCount, long productLimit, long customTemplateCount, long customTemplateLimit,
         long categoryCount, BigDecimal totalBilled, LocalDate lastInvoiceDate,
-        java.time.LocalDateTime createdAt) implements Serializable {
+        java.time.LocalDateTime createdAt, String accountStatus, boolean deleted,
+        java.time.Instant deletedAt, String deletedBy, String deletionReason) implements Serializable {
     public boolean hasPlan() { return planName != null; }
+    public boolean isActiveAccount() { return "Active".equals(accountStatus); }
+    /** Days until the current term ends; negative once it has expired. */
+    public Long daysToExpiry() {
+        return subscriptionEnd == null ? null : java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), subscriptionEnd);
+    }
+    public boolean expiringSoon() {
+        Long days = daysToExpiry();
+        return days != null && days >= 0 && days <= 7;
+    }
 }

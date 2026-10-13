@@ -27,6 +27,8 @@ public class CustomInvoiceTemplate {
     private BillTemplateStyle style = BillTemplateStyle.CLASSIC;
     @Column(name = "accent_color", length = 7) private String accentColor;
     @Column(nullable = false) private boolean active = true;
+    @Column(nullable = false) private int version = 1;
+    @Column(name = "deleted_at") private java.time.Instant deletedAt;
     @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
     @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
     protected CustomInvoiceTemplate() { }
@@ -47,6 +49,12 @@ public class CustomInvoiceTemplate {
     public String getAccentColor() { return accentColor; }
     public void setAccentColor(String v) { accentColor = v; }
     public boolean isActive() { return active; }
+    public int getVersion() { return version; }
+    public void setVersion(int value) { version = Math.max(1, value); }
+    public void bumpVersion() { version = Math.max(1, version) + 1; }
+    public java.time.Instant getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(java.time.Instant value) { deletedAt = value; }
+    public boolean isDeleted() { return deletedAt != null; }
     public void setActive(boolean v) { active = v; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

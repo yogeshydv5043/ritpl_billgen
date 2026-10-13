@@ -1,37 +1,173 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head(${formTitle})}"></head>
-<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
-<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content page-content-narrow">
-    <div class="breadcrumb"><a th:href="@{/customers}">Customer accounts</a><span>/</span><span th:text="${formTitle}">Add customer</span></div>
-    <section class="page-title-row compact-title"><div><span class="kicker">CUSTOMER ACCOUNT</span><h1 th:text="${formTitle}">Add customer</h1><p class="page-lede">This account gets its own invoices, products and categories — and a login of its own.</p></div></section>
-    <form class="panel form-panel" th:action="@{${formAction}}" th:object="${customerForm}" method="post" novalidate>
-        <div class="form-intro"><span class="form-step">01</span><div><h2>Account details</h2><p>Who is this billing account for?</p></div></div>
-        <div class="form-grid">
-            <div class="field field-full"><label for="companyName">Company or customer name <span class="required">*</span></label><input id="companyName" th:field="*{companyName}" placeholder="e.g. Northstar Studio" autocomplete="organization"><small class="field-error" th:if="${#fields.hasErrors('companyName')}" th:errors="*{companyName}"></small></div>
-            <div class="field"><label for="contactName">Primary contact <span class="required">*</span></label><input id="contactName" th:field="*{contactName}" placeholder="e.g. Maya Kapoor" autocomplete="name"><small class="field-error" th:if="${#fields.hasErrors('contactName')}" th:errors="*{contactName}"></small></div>
-            <div class="field"><label for="email">Account email <span class="required">*</span></label><input id="email" type="email" th:field="*{email}" placeholder="accounts@company.com" autocomplete="email"><small class="field-error" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></small></div>
-            <div class="field"><label for="phone">Phone number</label><input id="phone" type="tel" th:field="*{phone}" placeholder="+91 98765 43210" autocomplete="tel"><small class="field-error" th:if="${#fields.hasErrors('phone')}" th:errors="*{phone}"></small></div>
-            <div class="field"><label for="gstin">GSTIN <span class="optional">OPTIONAL</span></label><input id="gstin" th:field="*{gstin}" placeholder="15-character GSTIN" autocapitalize="characters"><small class="field-error" th:if="${#fields.hasErrors('gstin')}" th:errors="*{gstin}"></small></div>
+<head th:replace="~{fragments/layout :: head(${editing} ? 'Edit customer account' : 'Add customer account')}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content page-content-narrow">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Customer management</span>
+                    <h1 th:text="${formTitle}">Add customer account</h1>
+                    <p class="page-lede">Fields marked with an asterisk are required. Everything is re-checked on the server, including duplicate billing and login addresses across live <em>and</em> deleted accounts.</p>
+                </div>
+                <div class="button-group">
+                    <a class="button" th:if="${editing}" th:href="@{/customers/{id}(id=${entityId})}">Back to account</a>
+                    <a class="button button-quiet" th:href="@{/customers}">Cancel</a>
+                </div>
+            </section>
+
+            <p class="form-banner" th:if="${#fields.hasErrors('global')}" role="alert">
+                <span aria-hidden="true">!</span>
+                <span th:each="err : ${#fields.errors('global')}" th:text="${err}">The account could not be saved.</span>
+            </p>
+
+            <form method="post" th:action="@{${formAction}}" th:object="${customerForm}" novalidate>
+                <details class="form-section" id="section-company" open>
+                    <summary><div><h2>Company identity</h2><p>Printed on invoices and used everywhere the account is named.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="companyName">Company name <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="companyName" type="text" maxlength="160" required th:field="*{companyName}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('companyName')}">
+                                <span class="field-error" th:if="${#fields.hasErrors('companyName')}" th:errors="*{companyName}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="contactName">Contact person <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="contactName" type="text" maxlength="120" required th:field="*{contactName}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('contactName')}">
+                                <span class="field-error" th:if="${#fields.hasErrors('contactName')}" th:errors="*{contactName}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="email">Billing email <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="email" type="email" maxlength="190" autocomplete="off" required th:field="*{email}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('email')}">
+                                <span class="field-help">Where the customer sends invoices. Must be unique across all accounts.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('email')}" th:errors="*{email}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="phone">Phone</label>
+                                <input id="phone" type="tel" maxlength="40" th:field="*{phone}">
+                            </div>
+                            <div class="field">
+                                <label for="gstin">GSTIN</label>
+                                <input id="gstin" type="text" maxlength="24" placeholder="02ABCDE1234F1Z5" th:field="*{gstin}">
+                                <span class="field-help">Optional; shown in the seller block when present.</span>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="form-section" id="section-address" open>
+                    <summary><div><h2>Billing address</h2><p>Optional, but invoices look incomplete without it.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="billingAddress">Street address</label>
+                                <textarea id="billingAddress" rows="2" maxlength="255" th:field="*{billingAddress}"></textarea>
+                            </div>
+                            <div class="field"><label for="city">City</label><input id="city" type="text" maxlength="80" th:field="*{city}"></div>
+                            <div class="field"><label for="state">State</label><input id="state" type="text" maxlength="80" th:field="*{state}"></div>
+                            <div class="field"><label for="postalCode">Postal code</label><input id="postalCode" type="text" maxlength="24" th:field="*{postalCode}"></div>
+                            <div class="field"><label for="country">Country</label><input id="country" type="text" maxlength="80" th:field="*{country}"></div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="form-section" id="section-login" open>
+                    <summary><div><h2>Portal login</h2><p>The account's own credentials; customers manage their data with them.</p></div></summary>
+                    <div class="form-section-body">
+                        <p class="form-banner is-info"><span aria-hidden="true">i</span>
+                            <span th:if="${editing and customerForm.loginExists}">A login already exists for this account. Leave the password blank to keep it; setting a new password replaces it immediately.</span>
+                            <span th:unless="${editing and customerForm.loginExists}">A login is created with the account. Share the password once and ask the customer to change it after signing in.</span>
+                        </p>
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="loginEmail">Login email</label>
+                                <input id="loginEmail" type="email" maxlength="190" autocomplete="off" th:field="*{loginEmail}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('loginEmail')}">
+                                <span class="field-help">Blank uses the billing email as the sign-in address.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('loginEmail')}" th:errors="*{loginEmail}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="password">Password <span class="field-required" th:if="${!editing}" aria-hidden="true">*</span></label>
+                                <input id="password" type="text" maxlength="100" autocomplete="new-password" th:field="*{password}"
+                                       th:required="${!editing and !customerForm.loginExists}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('password')}">
+                                <span class="field-help">Minimum 10 characters. Passwords are hashed and never stored or displayed in plain text.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('password')}" th:errors="*{password}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <span class="field-label" id="lbl-login-enabled">Login state</span>
+                                <label class="check-row" for="loginEnabled">
+                                    <input id="loginEnabled" type="checkbox" th:field="*{loginEnabled}">
+                                    <span>Enabled — the customer may sign in to the portal</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="form-section" id="section-access" open>
+                    <summary><div><h2>Access &amp; subscription</h2><p>Availability for the whole account and the plan that grants entitlements.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="status">Account status</label>
+                                <select id="status" th:field="*{status}">
+                                    <option value="ACTIVE">Active</option>
+                                    <option value="DISABLED">Disabled</option>
+                                </select>
+                                <span class="field-help">A disabled account keeps every record but cannot sign in or create invoices.</span>
+                            </div>
+                            <th:block th:unless="${editing}">
+                                <div class="field">
+                                    <label for="planId">Subscription plan</label>
+                                    <select id="planId" th:field="*{planId}">
+                                        <option value="">No plan yet</option>
+                                        <option th:each="p : ${plans}" th:value="${p.id}" th:text="${p.name}">Growth</option>
+                                    </select>
+                                    <span class="field-help">Assigning a plan takes effect immediately — no checkout — and unlocks that plan's invoice templates.</span>
+                                </div>
+                                <div class="field">
+                                    <label for="startedOn">Term starts</label>
+                                    <input id="startedOn" type="date" th:field="*{startedOn}">
+                                    <span class="field-help">Defaults to today.</span>
+                                </div>
+                                <div class="field">
+                                    <label for="endsOn">Term ends</label>
+                                    <input id="endsOn" type="date" th:field="*{endsOn}">
+                                    <span class="field-help">Blank uses the plan's billing cycle length.</span>
+                                </div>
+                            </th:block>
+                        </div>
+                        <p class="form-banner is-info" th:if="${editing}"><span aria-hidden="true">i</span>
+                            <span>Plans and terms are changed from the account page so every change is recorded against the subscription history.
+                                <a th:href="@{/customers/{id}(id=${entityId})}">Open subscription history <span aria-hidden="true">→</span></a></span>
+                        </p>
+                    </div>
+                </details>
+
+                <div class="form-actions">
+                    <button class="button button-primary" type="submit" data-busy-label="Saving">
+                        <span aria-hidden="true">✓</span><span th:text="${editing} ? 'Save changes' : 'Create account'">Create account</span>
+                    </button>
+                    <a class="button" th:href="${editing} ? @{/customers/{id}(id=${entityId})} : @{/customers}">Discard</a>
+                    <span class="spacer"></span>
+                    <span class="field-help">Saving writes an audit entry against your username.</span>
+                </div>
+            </form>
         </div>
-        <div class="form-divider"></div>
-        <div class="form-intro"><span class="form-step">02</span><div><h2>Billing address</h2><p>Shown on the invoices this account generates.</p></div></div>
-        <div class="form-grid">
-            <div class="field field-full"><label for="billingAddress">Street address</label><input id="billingAddress" th:field="*{billingAddress}" placeholder="Building, street and area" autocomplete="street-address"><small class="field-error" th:if="${#fields.hasErrors('billingAddress')}" th:errors="*{billingAddress}"></small></div>
-            <div class="field"><label for="city">City</label><input id="city" th:field="*{city}" placeholder="City" autocomplete="address-level2"><small class="field-error" th:if="${#fields.hasErrors('city')}" th:errors="*{city}"></small></div>
-            <div class="field"><label for="state">State</label><input id="state" th:field="*{state}" placeholder="State" autocomplete="address-level1"><small class="field-error" th:if="${#fields.hasErrors('state')}" th:errors="*{state}"></small></div>
-            <div class="field"><label for="postalCode">Postal code</label><input id="postalCode" th:field="*{postalCode}" placeholder="Postal code" autocomplete="postal-code"><small class="field-error" th:if="${#fields.hasErrors('postalCode')}" th:errors="*{postalCode}"></small></div>
-            <div class="field"><label for="country">Country <span class="required">*</span></label><input id="country" th:field="*{country}" placeholder="India" autocomplete="country-name"><small class="field-error" th:if="${#fields.hasErrors('country')}" th:errors="*{country}"></small></div>
-        </div>
-        <div class="form-divider"></div>
-        <div class="form-intro"><span class="form-step">03</span><div><h2>Account login</h2><p>This login only ever sees this account’s own data.</p></div></div>
-        <div class="form-grid">
-            <div class="field"><label for="loginEmail">Login email <span class="optional">DEFAULTS TO ACCOUNT EMAIL</span></label><input id="loginEmail" type="email" th:field="*{loginEmail}" placeholder="billing@company.com" autocomplete="off"><small class="field-error" th:if="${#fields.hasErrors('loginEmail')}" th:errors="*{loginEmail}"></small></div>
-            <div class="field"><label for="password">Login password <span class="required" th:if="${formTitle == 'Add customer account' or !customerForm.loginExists}">*</span><span class="optional" th:if="${formTitle == 'Edit customer account' and customerForm.loginExists}">LEAVE BLANK TO KEEP</span></label><input id="password" type="password" th:field="*{password}" placeholder="At least 8 characters" autocomplete="new-password"><small class="field-help">The customer signs in with this password to reach its own portal. Changing the login email also requires a new password.</small><small class="field-error" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></small></div>
-            <div class="field field-full"><label class="check-field"><input type="checkbox" th:field="*{loginEnabled}"><span class="custom-check"></span><span><strong>Login enabled</strong><small>Turn off to suspend access without deleting any billing data.</small></span></label></div>
-        </div>
-        <div class="global-errors" th:if="${#fields.hasGlobalErrors()}"><p th:each="err : ${#fields.globalErrors()}" th:text="${err}">Please check the details.</p></div>
-        <div class="form-actions"><a class="button button-quiet" th:href="@{/customers}">Cancel</a><button class="button button-primary" type="submit">Save account <span>→</span></button></div>
-    </form>
-    <p class="form-footnote"><span>⌑</span> The customer’s invoices, products and categories are stored against this account only.</p>
-</div></main></div></body></html>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

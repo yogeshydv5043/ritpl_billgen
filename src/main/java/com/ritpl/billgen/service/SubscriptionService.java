@@ -46,6 +46,17 @@ public class SubscriptionService {
     }
 
     public LocalDate today() { return LocalDate.now(zone); }
+
+    /** The reminder schedule every active plan currently asks for, for the settings summary. */
+    @Transactional(readOnly = true)
+    public String reminderOffsetsSummary() {
+        java.util.Set<String> offsets = new java.util.TreeSet<>();
+        for (SubscriptionPlan plan : plans.findByActiveTrueAndDeletedAtIsNullOrderBySortOrderAscNameAsc()) {
+            offsets.add(plan.getExpiryReminderDays());
+        }
+        return offsets.isEmpty() ? "No active plans to notify about"
+                : "Plans notify at " + String.join(" / ", offsets) + " day(s) before expiry";
+    }
     public ZoneId zone() { return zone; }
 
     @Transactional(readOnly = true)

@@ -4,6 +4,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.ritpl.billgen.entity.AppUser;
@@ -11,6 +14,8 @@ import com.ritpl.billgen.entity.Customer;
 import com.ritpl.billgen.entity.CustomerSubscription;
 import com.ritpl.billgen.entity.SubscriptionStatus;
 import com.ritpl.billgen.repository.AppUserRepository;
+import com.ritpl.billgen.repository.CustomerFilter;
+import com.ritpl.billgen.repository.CustomerSpecs;
 import com.ritpl.billgen.repository.CatalogProductRepository;
 import com.ritpl.billgen.repository.CustomerRepository;
 import com.ritpl.billgen.repository.InvoiceRepository;
@@ -40,6 +45,27 @@ public class AccountStatsService {
         return accounts.stream().map(this::toStats).toList();
     }
 
+    /** Paged, filtered listing for the Super Admin customer module. */
+    @Transactional(readOnly = true)
+    public Page<CustomerAccountStats> page(TenantScope scope, CustomerFilter filter, Pageable pageable) {
+        if (!scope.isAdminScope()) {
+            return new org.springframework.data.domain.PageImpl<>(
+                    List.of(findOne(scope, scope.requireCustomerId())),
+                    pageable == null ? PageRequest.of(0, 20) : pageable, 1);
+        }
+        Pageable safe = pageable == null ? PageRequest.of(0, 20)
+                : PageRequest.of(Math.max(pageable.getPageNumber(), 0), Math.min(Math.max(pageable.getPageSize(), 1), 100),
+                        pageable.getSort());
+        return customers.findAll(CustomerSpecs.forFilter(filter, subscriptions.zone()), safe).map(this::toStats);
+    }
+
+    /** Deleted accounts, newest deletion first. */
+    @Transactional(readOnly = true)
+    public List<CustomerAccountStats> findDeleted(TenantScope scope) {
+        if (!scope.isAdminScope()) throw new org.springframework.security.access.AccessDeniedException("Administrator access is required.");
+        return customers.findAllByDeletedAtIsNotNullOrderByDeletedAtDesc().stream().map(this::toStats).toList();
+    }
+
     @Transactional(readOnly = true)
     public CustomerAccountStats findOne(TenantScope scope, long customerId) {
         scope.requireCustomerAccess(customerId);
@@ -67,6 +93,8 @@ public class AccountStatsService {
                 subscriptionStatus, current == null ? null : current.getStartedOn(), current == null ? null : current.getEndsOn(),
                 invoices.countByCustomer_IdAndUsageCountedTrue(id), quota.invoiceLimit(), quota.invoicesUsed(), quota.remainingInvoices(),
                 products.countByCustomer_Id(id), quota.productLimit(), quota.customTemplatesUsed(), quota.customTemplateLimit(),
-                categories.countByCustomer_Id(id), billed == null ? BigDecimal.ZERO : billed, lastIssue, customer.getCreatedAt());
+                categories.countByCustomer_Id(id), billed == null ? BigDecimal.ZERO : billed, lastIssue, customer.getCreatedAt(),
+                customer.getStatus().getLabel(), customer.isDeleted(), customer.getDeletedAt(), customer.getDeletedBy(),
+                customer.getDeletionReason());
     }
 }

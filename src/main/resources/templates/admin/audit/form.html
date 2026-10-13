@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(${formTitle})}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content page-content-narrow">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Audit management</span>
+                    <h1 th:text="${formTitle}">Create audit type</h1>
+                    <p class="page-lede">A definition decides what counts as one event, how many an account may record, and how long those records are kept. Recorded history is never rewritten by changes made here.</p>
+                </div>
+                <div class="button-group"><a class="button button-quiet" th:href="@{/admin/audit-types}">Cancel</a></div>
+            </section>
+
+            <p class="form-banner" th:if="${#fields.hasErrors('global')}" role="alert">
+                <span aria-hidden="true">!</span>
+                <span th:each="err : ${#fields.errors('global')}" th:text="${err}">The audit type could not be saved.</span>
+            </p>
+
+            <form method="post" th:action="@{${formAction}}" th:object="${auditTypeForm}" novalidate>
+                <details class="form-section" id="section-definition" open>
+                    <summary><div><h2>Definition</h2><p>What the tracked event is and where it belongs.</p></div></summary>
+                    <div class="form-section-body">
+                        <p class="form-banner is-info" th:if="${auditType != null and auditType.systemDefined}">
+                            <span aria-hidden="true">i</span>
+                            <span>This type is <strong>system-defined</strong>: its matching rule is depended on by the platform, so the code, action and resource type are fixed. Name, description, quota, retention and alerts remain editable.</span>
+                        </p>
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="name">Name <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="name" type="text" maxlength="120" required th:field="*{name}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('name')}">
+                                <span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="code">Code <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="code" type="text" maxlength="48" required pattern="[A-Za-z0-9_-]+" autocapitalize="characters"
+                                       th:field="*{code}" th:disabled="${auditType != null and auditType.systemDefined}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('code')}">
+                                <span class="field-help">Unique among live definitions; used in exports and API filters.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('code')}" th:errors="*{code}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="eventCategory">Event category</label>
+                                <select id="eventCategory" th:field="*{eventCategory}">
+                                    <option th:each="category : ${categories}" th:value="${category}" th:text="${category.label}">Security</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="description">Description</label>
+                                <textarea id="description" rows="2" maxlength="500" th:field="*{description}"></textarea>
+                                <span class="field-help">Shown to administrators in the registry and in exports.</span>
+                            </div>
+                            <div class="field">
+                                <label for="action">Matches action</label>
+                                <input id="action" type="text" maxlength="48" placeholder="LOGIN" th:field="*{action}"
+                                       th:disabled="${auditType != null and auditType.systemDefined}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('action')}">
+                                <span class="field-help">The recorded action verb this definition governs; upper-case, matched exactly. Blank means it only groups events by resource type.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('action')}" th:errors="*{action}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="resourceType">Matches resource type</label>
+                                <input id="resourceType" type="text" maxlength="48" placeholder="SESSION" th:field="*{resourceType}"
+                                       th:disabled="${auditType != null and auditType.systemDefined}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('resourceType')}">
+                                <span class="field-help">For example INVOICE, PRODUCT, CUSTOMER, PLAN, TEMPLATE, EXPORT, ADMIN.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('resourceType')}" th:errors="*{resourceType}" role="alert"></span>
+                            </div>
+                        </div>
+                        <p class="table-caption">Typical events administrators register here: login and logout, customer and product create/update/delete,
+                            invoice generation, invoice export, data export, subscription changes, template changes and other administrator actions.</p>
+                    </div>
+                </details>
+
+                <details class="form-section" id="section-quota" open>
+                    <summary><div><h2>Limit period &amp; quota</h2><p>One period is used at a time, exactly as the administrator picks it.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="limitPeriod">Limit period</label>
+                                <select id="limitPeriod" th:field="*{limitPeriod}">
+                                    <option th:each="period : ${periods}" th:value="${period}" th:text="${period.label}">Daily</option>
+                                </select>
+                                <span class="field-help">Choose NONE for unlimited recording, CUSTOM to define your own window length.</span>
+                            </div>
+                            <div class="field">
+                                <label for="usageLimit">Events per period</label>
+                                <input id="usageLimit" type="number" min="1" placeholder="No cap" th:field="*{usageLimit}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('usageLimit')}">
+                                <span class="field-help">Counted per account, in addition to the plan's own audit caps.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('usageLimit')}" th:errors="*{usageLimit}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="customPeriodDays">Custom window (days)</label>
+                                <input id="customPeriodDays" type="number" min="1" max="365" th:field="*{customPeriodDays}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('customPeriodDays')}">
+                                <span class="field-help">Only read when the limit period is CUSTOM.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('customPeriodDays')}" th:errors="*{customPeriodDays}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="alertThresholdPercent">Alert at percent of quota</label>
+                                <input id="alertThresholdPercent" type="number" min="1" max="100" th:field="*{alertThresholdPercent}">
+                                <span class="field-help">A notification rule or job can target this threshold; it never blocks recording by itself.</span>
+                            </div>
+                        </div>
+                        <p class="form-banner"><span aria-hidden="true">!</span>
+                            <span>A quota is reported and alerted, never used to silently drop an event. If the limit is reached the event is still written and the excess is visible in usage — losing evidence is worse than exceeding a cap.</span></p>
+                    </div>
+                </details>
+
+                <details class="form-section" id="section-retention" open>
+                    <summary><div><h2>Retention &amp; availability</h2><p>Separate from the quota: how long history survives, and whether tracking is on.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="retentionDays">Retention (days) <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="retentionDays" type="number" min="1" max="36500" required th:field="*{retentionDays}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('retentionDays')}">
+                                <span class="field-help">Records older than this are removed by the scheduled retention run only. The window is measured from the event timestamp, so a later edit never shortens existing history.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('retentionDays')}" th:errors="*{retentionDays}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <span class="field-label">Tracking</span>
+                                <label class="check-row" for="active"><input id="active" type="checkbox" th:field="*{active}">
+                                    <span>Active — matching events are recorded</span></label>
+                                <span class="field-help">Pausing stops new rows only. Nothing already recorded is touched, and history stays readable.</span>
+                            </div>
+                        </div>
+                        <p class="form-banner is-info"><span aria-hidden="true">i</span>
+                            <span>Logs are append-only: the database denies UPDATE on <code>audit_records</code> and permits DELETE only inside a retention session that declares its cutoff, so an ordinary account — including this console — cannot edit or remove a recorded event.</span></p>
+                    </div>
+                </details>
+
+                <div class="form-actions">
+                    <button class="button button-primary" type="submit" data-busy-label="Saving"><span aria-hidden="true">✓</span> Save definition</button>
+                    <a class="button" th:href="@{/admin/audit-types}">Discard</a>
+                    <span class="spacer"></span>
+                    <span class="field-help">Applicable plans are attached from the plan editor, so a definition and a plan never disagree by accident.</span>
+                </div>
+            </form>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

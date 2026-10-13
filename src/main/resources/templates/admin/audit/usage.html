@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Audit usage')}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Audit management</span>
+                    <h1 th:text="${auditType.name}">Login</h1>
+                    <p class="page-lede" th:text="${auditType.description != null ? auditType.description : 'No description recorded for this definition.'}">Tracked sign-in activity.</p>
+                    <p class="badge-row">
+                        <span class="badge badge-muted" th:text="${auditType.eventCategory.label}">Security</span>
+                        <span class="badge" th:classappend="${auditType.active ? 'status-active' : 'status-paused'}" th:text="${auditType.active ? 'Tracking' : 'Paused'}">Tracking</span>
+                        <span class="badge badge-info" th:text="${auditType.limitPeriod.label}">Daily</span>
+                        <span class="badge badge-soft" th:text="'retention ' + ${auditType.retentionDays} + ' d'">retention</span>
+                        <span class="badge badge-soft" th:text="'alert at ' + ${auditType.alertThresholdPercent} + '%'">alert</span>
+                    </p>
+                </div>
+                <div class="button-group">
+                    <a class="button" th:href="@{/admin/audit-types}">Back to registry</a>
+                    <a class="button button-quiet" th:href="@{/admin/audit-types/{id}/edit(id=${auditType.id})}">Edit definition</a>
+                </div>
+            </section>
+
+            <div class="stat-row">
+                <div class="stat"><b th:text="${usage.used}">0</b><span>Events in window</span></div>
+                <div class="stat"><b th:text="${usage.limit != null ? usage.limit : 'no cap'}">0</b><span>Per-account limit</span></div>
+                <div class="stat"><b th:text="${usage.windowDays} + ' d'">0 d</b><span>Window length</span></div>
+                <div class="stat" th:classappend="${usage.exhausted ? 'is-bad' : (usage.warning ? 'is-warn' : 'is-ok')}">
+                    <b th:text="${usage.percent} + '%'">0%</b><span>Highest account</span></div>
+            </div>
+
+            <div th:with="max=${usage.limit != null and usage.limit > 0 ? usage.limit : (usage.used > 0 ? usage.used : 1)}">
+                <div th:replace="~{fragments/components :: progress(${usage.used}, ${max}, ${usage.exhausted ? 'bad' : (usage.warning ? 'warn' : 'ok')})}"></div>
+            </div>
+            <p class="form-banner" th:if="${usage.warning}"><span aria-hidden="true">!</span>
+                <span>At least one account is past the alert threshold for this type. Quota is enforced per account, so check the busiest accounts before raising the limit.</span></p>
+
+            <section class="panel list-panel">
+                <div class="panel-heading"><div><span class="kicker">MATCHING RECORDS</span><h2>Most recent events <span class="heading-count" th:text="${records.totalElements}">0</span></h2></div>
+                    <a class="text-link" th:href="@{/admin/audit(action=${auditType.action})}">Audit explorer <span aria-hidden="true">→</span></a></div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th scope="col">When (UTC)</th><th scope="col">Account</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Summary</th><th scope="col"><span class="visually-hidden">Open</span></th></tr></thead>
+                        <tbody>
+                        <tr th:each="record : ${records.content}">
+                            <td class="nowrap" th:text="${record.createdAt}">2026-01-01T09:00Z</td>
+                            <td><span th:if="${record.customer != null}" th:text="${record.customer.companyName}">Company</span>
+                                <span th:if="${record.customer == null}" class="table-secondary">System</span></td>
+                            <td th:text="${record.actor}">admin</td>
+                            <td><code th:text="${record.action}">LOGIN</code></td>
+                            <td><span class="badge" th:classappend="${record.outcome == 'SUCCESS' ? 'status-active' : (record.outcome == 'DENIED' ? 'status-pending' : 'status-failed')}" th:text="${record.outcome}">SUCCESS</span></td>
+                            <td class="wrap-cell" th:text="${record.summary}">summary</td>
+                            <td><a class="row-arrow" th:href="@{/admin/audit/{id}(id=${record.id})}" th:attr="aria-label='Open audit record ' + ${record.id}">↗</a></td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(records.content)}"><td colspan="7">
+                            <div th:replace="~{fragments/components :: empty('◷', 'No events matched yet', 'Nothing has been recorded against this definition. It still counts as configured: any matching event is captured from now on.', null, null)}"></div>
+                        </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <footer class="page-footer">
+                <span>Records are read-only here too — this page reports usage, it cannot change history.</span>
+                <span th:text="'matching: ' + (auditType.action != null ? auditType.action : 'any action') + ' / ' + (auditType.resourceType != null ? auditType.resourceType : 'any resource')">matching</span>
+            </footer>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

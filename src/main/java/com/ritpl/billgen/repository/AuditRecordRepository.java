@@ -28,4 +28,22 @@ public interface AuditRecordRepository extends JpaRepository<AuditRecord, Long> 
             @Param("action") String action, @Param("resourceType") String resourceType,
             @Param("outcome") String outcome, @Param("fromTime") Instant fromTime,
             @Param("untilTime") Instant untilTime, Pageable pageable);
+
+    long countByAuditTypeIdAndCreatedAtAfter(Long auditTypeId, java.time.Instant from);
+
+    /** Usage of one audit definition inside a quota window, for a single account. */
+    long countByAuditTypeIdAndCustomerIdAndCreatedAtAfter(Long auditTypeId, Long customerId, java.time.Instant from);
+    long countByAuditTypeIdAndCustomerIdAndCreatedAtBetween(Long auditTypeId, Long customerId,
+            java.time.Instant from, java.time.Instant until);
+    long countByCustomerIdAndCreatedAtAfter(Long customerId, java.time.Instant from);
+
+    /** Oldest retained instant per definition, shown on the audit configuration screens. */
+    @Query("select min(a.createdAt) from AuditRecord a where a.auditTypeId = :auditTypeId")
+    java.util.Optional<java.time.Instant> oldestFor(@Param("auditTypeId") Long auditTypeId);
+
+    @Query("select a.auditTypeId, count(a) from AuditRecord a where a.createdAt >= :from group by a.auditTypeId")
+    java.util.List<Object[]> countByTypeSince(@Param("from") java.time.Instant from);
+
+    @Query("select count(a) from AuditRecord a where a.customer.id = :customerId")
+    long countForCustomer(@Param("customerId") Long customerId);
 }

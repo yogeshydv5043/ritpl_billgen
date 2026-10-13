@@ -47,6 +47,8 @@ public class Invoice {
     @Column(name = "template_name_snapshot", length = 100) private String templateNameSnapshot;
     @Column(name = "template_style_snapshot", length = 20) private String templateStyleSnapshot;
     @Column(name = "template_accent_snapshot", length = 7) private String templateAccentSnapshot;
+    /** The template version this invoice was produced with; edits to the template never rewrite it. */
+    @Column(name = "template_version_snapshot") private Integer templateVersionSnapshot;
     @Column(length = 1200) private String notes;
     @Column(nullable = false, precision = 14, scale = 2) private BigDecimal subtotal = BigDecimal.ZERO;
     @Column(name = "tax_amount", nullable = false, precision = 14, scale = 2) private BigDecimal taxAmount = BigDecimal.ZERO;
@@ -114,6 +116,8 @@ public class Invoice {
     public void setTemplateStyleSnapshot(String v) { templateStyleSnapshot = v; }
     public String getTemplateAccentSnapshot() { return templateAccentSnapshot; }
     public void setTemplateAccentSnapshot(String v) { templateAccentSnapshot = v; }
+    public Integer getTemplateVersionSnapshot() { return templateVersionSnapshot; }
+    public void setTemplateVersionSnapshot(Integer v) { templateVersionSnapshot = v; }
     public String getNotes() { return notes; }
     public void setNotes(String v) { notes = v; }
     public BigDecimal getSubtotal() { return subtotal; }

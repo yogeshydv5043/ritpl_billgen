@@ -1,0 +1,52 @@
+<!doctype html>
+<!-- Standalone document: this page is loaded inside the editor's iframe and by the preview link,
+     so it deliberately does not use the admin shell. -->
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Template preview</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+<body class="preview-body">
+<main class="preview-page">
+    <header class="preview-head">
+        <div>
+            <span class="kicker" th:text="${draft != null} ? 'DRAFT · NOT SAVED' : 'SAVED PREVIEW'">SAVED PREVIEW</span>
+            <h1 th:text="${template != null ? template.name : 'Untitled template'}">Classic</h1>
+            <p class="section-note" th:if="${template != null}">
+                Layout <strong th:text="${template.style.displayName}">Classic</strong> ·
+                version <strong th:text="'v' + ${template.version}">v1</strong> ·
+                used by <strong th:text="${assignedPlans}">0</strong> plan(s) ·
+                sample data only, nothing here is written to an invoice.
+            </p>
+        </div>
+        <div class="button-group" th:if="${template != null}">
+            <a class="button button-quiet" th:href="@{/admin/templates/{id}/edit(id=${template.id})}">Edit template</a>
+            <a class="button" th:href="@{/admin/templates}">Back to list</a>
+        </div>
+    </header>
+
+    <div class="bill-preview-shell" th:utext="${previewHtml}">
+        <p class="empty-inline">The preview could not be rendered.</p>
+    </div>
+
+    <section class="panel preview-notes" th:if="${template != null}">
+        <div class="panel-heading"><div><span class="kicker">WHAT THE RENDERER OWNS</span><h2>Fixed layout sections</h2></div></div>
+        <div class="panel-body">
+            <p class="section-note">The blocks below are always present; the layout controls how they look, and the fields above control their text. Company details and the logo come from each account's company profile, so a template never stores customer data.</p>
+            <ul class="modal-list">
+                <li><strong>Seller block</strong><span>Company name, address, GSTIN and logo placeholder, taken from the account profile at print time.</span></li>
+                <li><strong>Customer block</strong><span>Billed-to name, contact, address, GSTIN from the invoice's customer snapshot.</span></li>
+                <li><strong>Invoice header</strong><span>Invoice number, issue date, due date and payment state.</span></li>
+                <li><strong>Line items</strong><span>Description, quantity, unit price, discount and tax per line, ordered as entered.</span></li>
+                <li><strong>Totals</strong><span>Subtotal, discount, tax and grand total, computed server-side and snapshotted on the invoice.</span></li>
+                <li><strong>Payment terms &amp; notes</strong><span>Editable text blocks from this template.</span></li>
+                <li><strong>Footer</strong><span>Editable text block from this template.</span></li>
+            </ul>
+        </div>
+    </section>
+</main>
+</body>
+</html>

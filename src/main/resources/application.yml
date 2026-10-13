@@ -68,6 +68,19 @@ app:
   bootstrap:
     admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
     admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+  jobs:
+    # Durable worker. It is a separate concern from the web tier: batches are claimed on a poll,
+    # never inside a request. Set false to keep the queues growing without draining them.
+    enabled: ${APP_JOBS_ENABLED:true}
+    poll-interval-ms: ${APP_JOBS_POLL_INTERVAL_MS:15000}
+    initial-delay-ms: ${APP_JOBS_INITIAL_DELAY_MS:12000}
+    batches-per-poll: ${APP_JOBS_BATCHES_PER_POLL:5}
+  customers:
+    deletion:
+      # false = outstanding SENT invoices do not block a soft delete (the reason is still required).
+      block-outstanding-invoices: ${APP_CUSTOMERS_BLOCK_OUTSTANDING_DELETION:true}
+  mail:
+    from: ${APP_MAIL_FROM:no-reply@billgen.local}
   subscription:
     time-zone: ${SUBSCRIPTION_TIME_ZONE:Asia/Kolkata}
     expiry-reminder-cron: ${SUBSCRIPTION_EXPIRY_REMINDER_CRON:0 0 9 * * *}

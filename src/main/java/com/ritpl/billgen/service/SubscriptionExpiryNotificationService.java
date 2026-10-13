@@ -63,6 +63,14 @@ public class SubscriptionExpiryNotificationService {
         return notifications.findTop30ByCustomer_IdOrderByCreatedAtDesc(customerId);
     }
 
+    /** Unread in-app notices for the shell's bell. */
+    @Transactional(readOnly = true)
+    public long unreadCount(TenantScope scope) {
+        long customerId = scope.requireCustomerId();
+        return notifications.countByCustomer_IdAndStatusIn(customerId,
+                java.util.List.of(NotificationStatus.PENDING, NotificationStatus.DELIVERED));
+    }
+
     @Transactional
     public void markRead(TenantScope scope, long id) {
         long customerId = scope.requireCustomerId();

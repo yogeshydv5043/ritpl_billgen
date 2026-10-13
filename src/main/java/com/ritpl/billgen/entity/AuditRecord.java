@@ -39,6 +39,9 @@ public class AuditRecord {
     private String beforeValues;
     @Column(name = "after_values", columnDefinition = "text")
     private String afterValues;
+    /** The audit definition that governs this event's quota and retention (nullable for old rows). */
+    @Column(name = "audit_type_id")
+    private Long auditTypeId;
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -62,4 +65,6 @@ public class AuditRecord {
     public String getBeforeValues() { return beforeValues; }
     public String getAfterValues() { return afterValues; }
     public Instant getCreatedAt() { return createdAt; }
+    public Long getAuditTypeId() { return auditTypeId; }
+    public void setAuditTypeId(Long value) { auditTypeId = value; }
 }

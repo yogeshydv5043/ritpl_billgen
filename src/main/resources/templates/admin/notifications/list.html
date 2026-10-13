@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Dynamic notifications')}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Dynamic notification management</span>
+                    <h1>Notification rules</h1>
+                    <p class="page-lede">Title, body, channel, trigger and recipients are data, not code: a new alert never needs a release. Placeholders are validated before a rule can be activated, and every send is recorded with its delivery status.</p>
+                </div>
+                <div class="button-group">
+                    <a class="button button-quiet" th:href="@{/admin/notifications/history}">Delivery history</a>
+                    <a class="button button-primary" th:href="@{/admin/notifications/new}"><span class="button-plus" aria-hidden="true">＋</span> New notification</a>
+                </div>
+            </section>
+
+            <div class="stat-row">
+                <div class="stat"><b th:text="${#lists.size(notifications)}">0</b><span>Rules</span></div>
+                <div class="stat is-ok"><b th:text="${deliveryCounts.get('SENT') != null ? deliveryCounts.get('SENT') : 0}">0</b><span>Delivered</span></div>
+                <div class="stat" th:classappend="${deliveryCounts.get('FAILED') != null and deliveryCounts.get('FAILED') > 0 ? 'is-bad' : ''}"><b th:text="${deliveryCounts.get('FAILED') != null ? deliveryCounts.get('FAILED') : 0}">0</b><span>Failed</span></div>
+                <div class="stat is-warn" th:if="${deliveryCounts.get('PENDING') != null}"><b th:text="${deliveryCounts.get('PENDING')}">0</b><span>Pending</span></div>
+                <div class="stat"><b th:text="${deliveryCounts.get('SIMULATED') != null ? deliveryCounts.get('SIMULATED') : 0}">0</b><span>Simulated</span></div>
+            </div>
+
+            <section class="panel list-panel">
+                <div class="list-toolbar">
+                    <div class="list-count"><span class="count-dot" aria-hidden="true"></span>
+                        <strong th:text="${#lists.size(notifications)}">0</strong> rule(s) — deleted rules are hidden, their history is not</div>
+                    <p class="toolbar-note" th:text="'transport: ' + ${mailTransport}">transport</p>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th scope="col">ID</th><th scope="col">Name</th><th scope="col">Channel</th>
+                            <th scope="col">Trigger event</th><th scope="col">Recipients</th><th scope="col">Filters</th>
+                            <th scope="col">Schedule</th><th scope="col">Status</th><th scope="col">Last sent</th>
+                            <th scope="col">Last updated</th><th scope="col">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="row : ${notifications}">
+                            <td><span class="table-id" th:text="'#' + ${row.id}">#0</span></td>
+                            <td><a class="table-primary" th:href="@{/admin/notifications/{id}/history(id=${row.id})}" th:text="${row.name}">Expiry warning</a>
+                                <span class="table-secondary" th:text="${row.title}">title</span></td>
+                            <td><span class="badge" th:classappend="${row.channel.name() == 'BOTH' ? 'badge-info' : (row.channel.name() == 'EMAIL' ? 'badge-soft' : 'badge-muted')}"
+                                     th:text="${row.channel.label}">Email</span></td>
+                            <td><code th:text="${row.triggerEvent.name()}">SUBSCRIPTION_EXPIRING_7</code>
+                                <span class="table-secondary" th:text="${row.triggerEvent.label}">label</span></td>
+                            <td th:text="${row.recipientType.label}">Customer accounts</td>
+                            <td><span class="table-secondary" style="margin-top:0" th:text="${row.statusFilter.label}">Every account</span>
+                                <span class="table-secondary" th:if="${row.planFilter != null and !#strings.isEmpty(row.planFilter)}"
+                                      th:text="'plans: ' + ${row.planFilter}">plans</span>
+                                <span class="table-secondary" th:unless="${row.planFilter != null and !#strings.isEmpty(row.planFilter)}">all plans</span></td>
+                            <td><code th:if="${row.scheduleExpression != null and !#strings.isEmpty(row.scheduleExpression)}" th:text="${row.scheduleExpression}">0 8 * * *</code>
+                                <span th:if="${row.scheduleExpression == null or #strings.isEmpty(row.scheduleExpression)}" class="badge badge-muted">On trigger</span></td>
+                            <td><span class="badge" th:classappend="${row.active ? 'status-active' : 'status-paused'}" th:text="${row.active ? 'Active' : 'Inactive'}">Active</span></td>
+                            <td class="nowrap" th:text="${row.lastRunAt != null ? row.lastRunAt : 'never'}">never</td>
+                            <td class="nowrap" th:text="${row.updatedAt}">—</td>
+                            <td>
+                                <div class="row-actions">
+                                    <a class="row-arrow" th:href="@{/admin/notifications/{id}/history(id=${row.id})}" title="Delivery history"
+                                       th:attr="aria-label='Delivery history for ' + ${row.name}">◷</a>
+                                    <a class="button button-quiet button-small" th:href="@{/admin/notifications/{id}/edit(id=${row.id})}">Edit</a>
+                                    <form method="post" th:action="@{/admin/notifications/{id}/active(id=${row.id})}"
+                                          th:attr="data-confirm-title=${row.active ? 'Deactivate this rule?' : 'Activate this rule?'},
+                                                   data-confirm-text=${row.active
+                                                       ? 'It stops sending immediately and existing in-app rows stay in the notification centre. Placeholders are re-validated on the next activation.'
+                                                       : 'Activation is refused unless every placeholder in the title and body is one the system can fill.'},
+                                                   data-confirm-check=${row.active ? 'I know no further alerts will be sent by this rule.' : ''}">
+                                        <input type="hidden" name="active" th:value="${row.active ? 'false' : 'true'}">
+                                        <button class="button button-quiet button-small" type="submit" th:text="${row.active ? 'Deactivate' : 'Activate'}">Deactivate</button>
+                                    </form>
+                                    <form method="post" th:action="@{/admin/notifications/{id}/delete(id=${row.id})}"
+                                          th:attr="data-confirm-title='Delete this notification rule?',
+                                                   data-confirm-text='The rule is retired and stops firing. Its delivery history is kept, so alerts already sent stay auditable and reusing the name cannot inherit the old rows.',
+                                                   data-confirm-check='I understand delivery history is preserved.'">
+                                        <button class="button button-danger button-small" type="submit">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(notifications)}"><td colspan="11">
+                            <div th:replace="~{fragments/components :: empty('◉', 'No notification rules yet', 'Create a rule to send an alert when something happens — an expiring subscription, a usage threshold, an exhausted limit, a failed job. Nothing in this list needs a code change.', 'New notification', '/admin/notifications/new')}"></div>
+                        </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading"><div><span class="kicker">AVAILABLE TRIGGERS</span><h2>What a rule can react to</h2></div></div>
+                <div class="panel-body">
+                    <ul class="modal-list">
+                        <li th:each="trigger : ${triggers}"><strong th:text="${trigger.label}">Trigger</strong><span><code th:text="${trigger.name()}">NAME</code></span></li>
+                    </ul>
+                </div>
+            </section>
+
+            <footer class="page-footer">
+                <span>In-app rows are marked delivered as soon as they are stored; email rows reflect the configured transport.</span>
+                <a th:href="@{/admin/jobs}">Bulk jobs <span aria-hidden="true">→</span></a>
+            </footer>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>
