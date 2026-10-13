@@ -88,7 +88,9 @@ CREATE INDEX idx_job_recipients_batch ON job_recipients(batch_id, status);
 --   * UPDATE of an audit row is always refused (history is append-only);
 --   * DELETE is only permitted inside a session that has set app.audit_purge_cutoff to an ISO
 --     instant, and even then only for rows created at or before that instant.
-CREATE FUNCTION deny_audit_mutation() RETURNS trigger AS $$
+-- Replaces the V3 guard of the same name; the signature is unchanged so the existing triggers
+-- keep working, only the body becomes narrower.
+CREATE OR REPLACE FUNCTION deny_audit_mutation() RETURNS trigger AS $$
 DECLARE
     cutoff text := current_setting('app.audit_purge_cutoff', TRUE);
 BEGIN
