@@ -103,6 +103,15 @@ public class BackgroundJob {
     public void setEligibleCount(int v) { eligibleCount = Math.max(0, v); }
     public int getBatchCount() { return batchCount; }
     public void setBatchCount(int v) { batchCount = Math.max(0, v); }
+    /**
+     * Direct assignment exists for the two administrative recomputations: requeueing failed
+     * recipients on a retry, and resetting progress when a job is re-armed for another run.
+     * Counts never go negative, so a recomputation cannot corrupt progress reporting.
+     */
+    public void setProcessedCount(int v) { processedCount = Math.max(0, v); }
+    public void setSuccessCount(int v) { successCount = Math.max(0, v); }
+    public void setFailedCount(int v) { failedCount = Math.max(0, v); }
+
     public int getProcessedCount() { return processedCount; }
     public int getSuccessCount() { return successCount; }
     public int getFailedCount() { return failedCount; }

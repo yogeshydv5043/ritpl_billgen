@@ -209,7 +209,7 @@ public class PlanService {
     private String normaliseReminders(String value) {
         if (value == null || value.isBlank()) return "30,7,3,1";
         String cleaned = java.util.Arrays.stream(value.split(",")).map(String::trim)
-                .filter(v -> v.matches("\d{1,3}")).map(v -> Math.min(365, Integer.parseInt(v)))
+                .filter(v -> v.matches("\\d{1,3}")).map(v -> Math.min(365, Integer.parseInt(v)))
                 .distinct().sorted(java.util.Comparator.reverseOrder())
                 .map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
         if (cleaned.isBlank()) throw new IllegalArgumentException("Expiry reminders must be a comma separated list of day offsets.");

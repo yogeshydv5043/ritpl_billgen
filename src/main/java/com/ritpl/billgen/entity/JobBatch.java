@@ -55,6 +55,7 @@ public class JobBatch {
     public int getBatchNumber() { return batchNumber; }
     public int getOffsetIndex() { return offsetIndex; }
     public int getItemCount() { return itemCount; }
+    public void setAttempts(int v) { attempts = Math.max(0, v); }
     public void setSuccessCount(int v) { successCount = Math.max(0, v); }
     public void setFailedCount(int v) { failedCount = Math.max(0, v); }
     public void setLastError(String v) { lastError = clip(v); }

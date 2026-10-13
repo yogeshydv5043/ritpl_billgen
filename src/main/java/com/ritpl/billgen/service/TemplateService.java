@@ -22,6 +22,8 @@ import com.ritpl.billgen.security.TenantScope;
  */
 @Service
 public class TemplateService {
+    /** A double quote, written once so the HTML builder above stays readable. */
+    private static final String QUOTE = "\"";
     private static final String NOT_FOUND = "Bill template not found.";
 
     private final BillTemplateRepository templates;
@@ -150,51 +152,57 @@ public class TemplateService {
     }
 
     /**
+    /**
      * A static preview of the layout with sample data. It is deliberately plain HTML so the same
-     * markup can be reused by the print stylesheet and by the PDF renderer.
+     * markup can be reused by the print stylesheet and by the PDF renderer. Attributes are quoted
+     * with single quotes because the fragment is assembled inside Java string literals.
      */
     public String previewHtml(TemplateCommand command, String sampleCompanyName) {
         String accent = blankToNull(command == null ? null : command.accentColor());
         String safeAccent = accent != null && accent.matches("#[0-9a-fA-F]{6}") ? accent : "#17172f";
         String style = command == null || command.style() == null ? "CLASSIC" : command.style().name();
         StringBuilder html = new StringBuilder();
-        html.append("<div class="bill-preview bill-preview-").append(style.toLowerCase(Locale.ROOT))
-                .append("" style="--preview-accent:").append(safeAccent).append("">");
-        html.append("<header class="bill-preview-head"><div><strong>")
+        html.append("<div class='bill-preview bill-preview-").append(style.toLowerCase(Locale.ROOT))
+                .append("' style='--preview-accent:").append(safeAccent).append("'>");
+        html.append("<header class='bill-preview-head'><div><strong>")
                 .append(escape(sampleCompanyName == null ? "Northstar Studio" : sampleCompanyName))
                 .append("</strong><small>Studio Lane 14 · Bengaluru 560001 · GSTIN 29ABCDE1234F1Z5</small></div>")
-                .append("<div class="bill-preview-mark">TAX INVOICE</div></header>");
+                .append("<div class='bill-preview-mark'>TAX INVOICE</div></header>");
         if (blankToNull(command == null ? null : command.headerText()) != null) {
-            html.append("<p class="bill-preview-header">").append(escape(command.headerText())).append("</p>");
+            html.append("<p class='bill-preview-header'>").append(escape(command.headerText())).append("</p>");
         }
-        html.append("<div class="bill-preview-meta"><span><small>Invoice</small>INV-001042</span>")
+        html.append("<div class='bill-preview-meta'><span><small>Invoice</small>INV-001042</span>")
                 .append("<span><small>Issued</small>").append(java.time.LocalDate.now()).append("</span>")
                 .append("<span><small>Due</small>").append(java.time.LocalDate.now().plusDays(14)).append("</span></div>");
-        html.append("<table class="bill-preview-lines"><thead><tr><th>Description</th><th>Qty</th><th>Unit</th>")
+        html.append("<table class='bill-preview-lines'><thead><tr><th>Description</th><th>Qty</th><th>Unit</th>")
                 .append("<th>Tax</th><th>Amount</th></tr></thead><tbody>")
                 .append("<tr><td>Design sprint</td><td>4</td><td>12,500.00</td><td>18%</td><td>59,000.00</td></tr>")
                 .append("<tr><td>Managed hosting</td><td>1</td><td>8,000.00</td><td>18%</td><td>9,440.00</td></tr>")
                 .append("</tbody></table>");
-        html.append("<div class="bill-preview-totals"><span>Subtotal <b>₹ 56,500.00</b></span>")
+        html.append("<div class='bill-preview-totals'><span>Subtotal <b>₹ 56,500.00</b></span>")
                 .append("<span>Tax <b>₹ 10,170.00</b></span><span>Discount <b>−₹ 1,500.00</b></span>")
-                .append("<span class="bill-preview-total">Total <b>₹ 65,170.00</b></span></div>");
+                .append("<span class='bill-preview-total'>Total <b>₹ 65,170.00</b></span></div>");
         if (blankToNull(command == null ? null : command.paymentTerms()) != null) {
-            html.append("<p class="bill-preview-terms"><strong>Payment terms</strong>")
+            html.append("<p class='bill-preview-terms'><strong>Payment terms</strong>")
                     .append(escape(command.paymentTerms())).append("</p>");
         }
         if (blankToNull(command == null ? null : command.termsAndConditions()) != null) {
-            html.append("<p class="bill-preview-terms"><strong>Terms and conditions</strong>")
+            html.append("<p class='bill-preview-terms'><strong>Terms and conditions</strong>")
                     .append(escape(command.termsAndConditions())).append("</p>");
         }
         if (blankToNull(command == null ? null : command.footerText()) != null) {
-            html.append("<footer class="bill-preview-foot">").append(escape(command.footerText())).append("</footer>");
+            html.append("<footer class='bill-preview-foot'>").append(escape(command.footerText())).append("</footer>");
         }
         html.append("</div>");
         return html.toString();
     }
 
+    /** Escapes the five characters that could otherwise break out of text or an attribute. */
     private String escape(String value) {
-        return value == null ? "" : value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace(""", "&quot;");
+        if (value == null) return "";
+        String escaped = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        escaped = escaped.replace(QUOTE, "&quot;").replace("'", "&#39;");
+        return escaped.replace("\n", "<br>");
     }
 
     private void validate(TemplateCommand c) {
