@@ -9,8 +9,11 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import com.ritpl.billgen.security.AppUserPrincipal;
+import com.ritpl.billgen.security.AuthenticationAudit;
 
 @Configuration
 public class SecurityConfig {
@@ -39,7 +42,7 @@ public class SecurityConfig {
      */
     @Bean
     @Order(2)
-    SecurityFilterChain webSecurityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain webSecurityFilterChain(HttpSecurity http, AuthenticationAudit authAudit) throws Exception {
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/login", "/register", "/css/**", "/js/**", "/images/**", "/favicon.ico", "/error", "/error/**", "/plans", "/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/portal/**").hasRole("CUSTOMER")
@@ -48,11 +51,29 @@ public class SecurityConfig {
                 .anyRequest().authenticated())
             .exceptionHandling(errors -> errors.accessDeniedPage("/error/403"))
             .formLogin(form -> form.loginPage("/login").loginProcessingUrl("/login")
-                    .successHandler(roleSuccessHandler()).failureUrl("/login?error").permitAll())
-            .logout(logout -> logout.logoutUrl("/logout").logoutSuccessUrl("/login?logout").invalidateHttpSession(true).clearAuthentication(true).deleteCookies("SESSION", "JSESSIONID"))
+                    .successHandler(loginSucceeded(authAudit)).failureHandler(loginRejected(authAudit)).permitAll())
+            .logout(logout -> logout.logoutUrl("/logout")
+                    .addLogoutHandler((request, response, authentication) -> authAudit.recordLogout(authentication, request))
+                    .logoutSuccessUrl("/login?logout").invalidateHttpSession(true).clearAuthentication(true).deleteCookies("SESSION", "JSESSIONID"))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                     .sessionFixation(fixation -> fixation.migrateSession()));
         return http.build();
+    }
+
+    /** Sign-ins and sign-outs are audit events: the row is written, then the browser is redirected. */
+    private AuthenticationSuccessHandler loginSucceeded(AuthenticationAudit authAudit) {
+        AuthenticationSuccessHandler redirect = roleSuccessHandler();
+        return (request, response, authentication) -> {
+            authAudit.recordLogin(authentication, request);
+            redirect.onAuthenticationSuccess(request, response, authentication);
+        };
+    }
+    private AuthenticationFailureHandler loginRejected(AuthenticationAudit authAudit) {
+        AuthenticationFailureHandler redirect = new SimpleUrlAuthenticationFailureHandler("/login?error");
+        return (request, response, exception) -> {
+            authAudit.recordFailure(request);
+            redirect.onAuthenticationFailure(request, response, exception);
+        };
     }
 
     @Bean

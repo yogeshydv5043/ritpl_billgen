@@ -15,7 +15,7 @@ CREATE TABLE audit_types (
     description VARCHAR(500),
     event_category VARCHAR(32) NOT NULL CHECK (event_category IN
         ('SECURITY', 'ACCOUNT', 'BILLING', 'CATALOG', 'SUBSCRIPTION', 'TEMPLATE', 'ADMINISTRATION', 'SYSTEM')),
-    action VARCHAR(48) NOT NULL,
+    action VARCHAR(48),
     resource_type VARCHAR(48),
     limit_period VARCHAR(16) NOT NULL DEFAULT 'NONE' CHECK (limit_period IN
         ('NONE', 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', 'CUSTOM')),
@@ -32,21 +32,39 @@ CREATE TABLE audit_types (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_audit_types_code UNIQUE (code),
     CONSTRAINT uq_audit_types_name UNIQUE (name),
-    CONSTRAINT ck_audit_types_custom_period CHECK (limit_period <> 'CUSTOM' OR custom_period_days IS NOT NULL)
+    CONSTRAINT ck_audit_types_custom_period CHECK (limit_period <> 'CUSTOM' OR custom_period_days IS NOT NULL),
+    -- A definition has to say what it governs: one action, or every event on one resource type.
+    CONSTRAINT ck_audit_types_matcher CHECK (action IS NOT NULL OR resource_type IS NOT NULL)
 );
 CREATE INDEX idx_audit_types_active ON audit_types(active, event_category, name);
 
+-- Every event the application actually raises has a definition here, so quotas, alert
+-- thresholds and retention can be adjusted from the admin UI instead of in code. A row
+-- names either one action or one resource type; the action form is the more specific of
+-- the two and is what the writer prefers when both could apply.
 INSERT INTO audit_types (code, name, description, event_category, action, resource_type, limit_period, retention_days, system_defined) VALUES
-    ('AUTH_SESSION',   'Login and logout',            'Authentication events recorded for every sign-in and sign-out.', 'SECURITY',       'LOGIN',           NULL,                 'NONE',   1095, TRUE),
-    ('AUTH_FAILURE',   'Failed sign-in attempts',     'Rejected credentials and disabled-account attempts.',            'SECURITY',       'LOGIN_FAILURE',   NULL,                 'NONE',   1095, TRUE),
-    ('CUSTOMER_CHANGE','Customer creation or update', 'Administrator changes to a company account.',                    'ACCOUNT',        NULL,              'CUSTOMER',           'NONE',   1825, TRUE),
-    ('CATALOG_CHANGE', 'Product creation or update',  'Changes to an account''s product catalogue.',                    'CATALOG',        NULL,              'PRODUCT',            'NONE',    730, TRUE),
-    ('INVOICE_ISSUE',  'Invoice generation',          'Invoice creation and issuance events.',                          'BILLING',        NULL,              'INVOICE',            'NONE',   1825, TRUE),
-    ('INVOICE_EXPORT', 'Invoice export',              'PDF downloads and invoice exports.',                             'BILLING',        NULL,              'INVOICE_EXPORT',     'NONE',    730, TRUE),
-    ('DATA_EXPORT',    'Data export',                 'Excel exports of products, invoices or audit records.',          'BILLING',        NULL,              'EXPORT',             'NONE',    730, TRUE),
-    ('SUBSCRIPTION',   'Subscription changes',        'Plan assignment, renewal, cancellation and expiry notices.',     'SUBSCRIPTION',   NULL,              'SUBSCRIPTION',       'NONE',   1825, TRUE),
-    ('TEMPLATE_CHANGE','Template changes',            'Changes to bill templates and custom templates.',                'TEMPLATE',       NULL,              'TEMPLATE',           'NONE',    730, TRUE),
-    ('ADMIN_ACTION',   'Administrative actions',      'Privileged changes that are not covered elsewhere.',              'ADMINISTRATION', NULL,              NULL,                 'NONE',   1825, TRUE);
+    ('AUTH_LOGIN', 'Sign-in events', 'Successful form logins by customers and administrators.', 'SECURITY', 'LOGIN', NULL, 'NONE', 1095, TRUE),
+    ('AUTH_LOGOUT', 'Sign-out events', 'Sessions ended from the application.', 'SECURITY', 'LOGOUT', NULL, 'NONE', 1095, TRUE),
+    ('AUTH_FAILURE', 'Rejected sign-in attempts', 'Bad credentials, disabled logins and blocked accounts.', 'SECURITY', 'LOGIN_FAILURE', NULL, 'NONE', 1095, TRUE),
+    ('ADMIN_CREDENTIALS', 'Administrator profile changes', 'Password and profile edits on an administrator login.', 'SECURITY', 'ADMIN_ACCOUNT', NULL, 'NONE', 1825, TRUE),
+    ('CUSTOMER_CHANGE', 'Customer account changes', 'Creation, updates, status changes, deletion and restore.', 'ACCOUNT', NULL, 'CUSTOMER', 'NONE', 1825, TRUE),
+    ('LOGIN_CREDENTIALS', 'Customer login changes', 'Password resets and login edits for a company account.', 'ACCOUNT', NULL, 'CUSTOMER_LOGIN', 'NONE', 1825, TRUE),
+    ('COMPANY_PROFILE', 'Company profile changes', 'Trading name, address, tax details and logo.', 'ACCOUNT', NULL, 'COMPANY_PROFILE', 'NONE', 1095, TRUE),
+    ('NOTIFICATION_READ', 'Notification reads', 'Moments a customer opened an in-app notification.', 'ACCOUNT', NULL, 'NOTIFICATION', 'NONE', 730, TRUE),
+    ('EXPORT_INVOICE', 'Invoice exports', 'PDF downloads and invoice data exports.', 'BILLING', 'EXPORT', NULL, 'NONE', 730, TRUE),
+    ('EXPORT_PRODUCT', 'Product exports', 'Excel exports of a product catalogue.', 'BILLING', 'PRODUCT_EXPORT', NULL, 'NONE', 730, TRUE),
+    ('EXPORT_REPORT', 'Report exports', 'Monthly invoice report workbooks.', 'BILLING', 'INVOICE_REPORT_EXPORT', NULL, 'NONE', 730, TRUE),
+    ('INVOICE_ACTIVITY', 'Invoice activity', 'Creation, issuance, cancellation and failed writes.', 'BILLING', NULL, 'INVOICE', 'NONE', 1825, TRUE),
+    ('CATALOG_CHANGE', 'Product changes', 'Products created, updated or removed.', 'CATALOG', NULL, 'PRODUCT', 'NONE', 730, TRUE),
+    ('CATEGORY_CHANGE', 'Category changes', 'Product categories created, updated or removed.', 'CATALOG', NULL, 'CATEGORY', 'NONE', 730, TRUE),
+    ('SUBSCRIPTION_CHANGE', 'Subscription changes', 'Plan assignment, renewal, expiry and cancellation.', 'SUBSCRIPTION', NULL, 'SUBSCRIPTION', 'NONE', 1825, TRUE),
+    ('BILL_TEMPLATE_CHANGE', 'Bill template changes', 'Shared invoice templates and their versions.', 'TEMPLATE', NULL, 'TEMPLATE', 'NONE', 730, TRUE),
+    ('CUSTOM_TEMPLATE_CHANGE', 'Custom template changes', 'Templates a customer built for itself.', 'TEMPLATE', NULL, 'CUSTOM_TEMPLATE', 'NONE', 730, TRUE),
+    ('AUDIT_ACCESS', 'Audit history access', 'Views and exports of the audit trail itself.', 'ADMINISTRATION', NULL, 'AUDIT', 'NONE', 1095, TRUE),
+    ('AUDIT_TYPE_CHANGE', 'Audit registry changes', 'Definitions and retention purges.', 'ADMINISTRATION', NULL, 'AUDIT_TYPE', 'NONE', 1825, TRUE),
+    ('PLAN_CHANGE', 'Plan configuration', 'Plans, their limits, entitlements and lifecycle.', 'ADMINISTRATION', NULL, 'PLAN', 'NONE', 1825, TRUE),
+    ('NOTIFICATION_CHANGE', 'Notification configuration', 'Dynamic notification definitions and their state.', 'ADMINISTRATION', NULL, 'NOTIFICATION_CONFIG', 'NONE', 1095, TRUE),
+    ('JOB_CHANGE', 'Background jobs', 'Job creation, runs, retries, pauses and cancels.', 'ADMINISTRATION', NULL, 'JOB', 'NONE', 1095, TRUE);
 
 -- Audit types permitted per plan (an entitlement, like templates).
 CREATE TABLE plan_audit_types (

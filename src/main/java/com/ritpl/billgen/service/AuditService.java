@@ -63,8 +63,14 @@ public class AuditService {
 
     /** The audit definition that governs an event, read from a short-lived cache of the registry. */
     private Long matchTypeId(String action, String resourceType) {
-        for (AuditType type : activeTypes()) {
-            if (type.matches(action, resourceType)) return type.getId();
+        List<AuditType> types = activeTypes();
+        // Naming one action is more specific than covering a whole resource type, so action rules
+        // are tried first and a definition never depends on the registry's display order.
+        for (AuditType type : types) {
+            if (type.matchesAction(action)) return type.getId();
+        }
+        for (AuditType type : types) {
+            if (type.matchesResourceType(resourceType)) return type.getId();
         }
         return null;
     }

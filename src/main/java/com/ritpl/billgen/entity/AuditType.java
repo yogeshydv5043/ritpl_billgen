@@ -52,6 +52,15 @@ public class AuditType {
     @PrePersist void onCreate() { LocalDateTime now = LocalDateTime.now(); createdAt = now; updatedAt = now; }
     @PreUpdate void onUpdate() { updatedAt = LocalDateTime.now(); }
 
+    /** True when the definition names one specific action rather than a whole resource type. */
+    public boolean hasAction() { return action != null && !action.isBlank(); }
+    /** True when the definition covers every event raised on one resource type. */
+    public boolean hasResourceType() { return resourceType != null && !resourceType.isBlank(); }
+    boolean matchesAction(String recordAction) { return hasAction() && action.equalsIgnoreCase(recordAction); }
+    boolean matchesResourceType(String recordResourceType) {
+        return !hasAction() && hasResourceType() && resourceType.equalsIgnoreCase(recordResourceType);
+    }
+
     /** Whether this definition governs a given audit record. */
     public boolean matches(String recordAction, String recordResourceType) {
         if (action != null && !action.isBlank()) return action.equalsIgnoreCase(recordAction);
