@@ -307,6 +307,8 @@ a.table-primary:hover, .customer-link:hover, .table-email:hover { color: #6049dc
 .form-actions { display: flex; justify-content: flex-end; gap: 9px; margin: 27px 0 0; padding-top: 18px; border-top: 1px solid #efeff4; }
 .global-errors { margin-top: 17px; padding: 10px 13px; border: 1px solid #f0cdce; border-radius: 9px; color: #a64b54; background: #fff7f7; font-size: 10px; }
 .global-errors p { margin: 2px 0; }
+/* A form that leads with its complaints should not push them away from its own fields. */
+.stack-form > .global-errors { margin-top: 0; margin-bottom: 4px; }
 .form-footnote { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 17px 0; color: #a3a2b2; font-size: 9px; }
 .form-footnote span { color: #8d79ec; font-size: 13px; }
 .check-field { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
