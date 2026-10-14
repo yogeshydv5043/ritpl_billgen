@@ -209,8 +209,12 @@ class CustomerPanelIntegrationTest {
                         tenant.templateId(), List.of(line("Work", "1", "1.00", "0.00")), InvoiceStatus.DRAFT)));
         assertTrue(refusal.getMessage().contains("Only a draft"), refusal.getMessage());
         assertEquals(1L, countedSlots(tenant), "issuing is what consumes the slot");
-        assertEquals(1L, count("select count(*) from audit_records where customer_id = ? and action = 'UPDATE'"
-                + " and resource_type = 'INVOICE'", tenant.customerId()), "the edit is audited once");
+        // Both accepted edits are on the record, once each. The refused one is there too, under its own
+        // action: a rejected attempt to rewrite a delivered invoice still leaves a trace.
+        assertEquals(2L, count("select count(*) from audit_records where customer_id = ? and action = 'UPDATE'"
+                + " and resource_type = 'INVOICE'", tenant.customerId()), "each accepted edit is audited exactly once");
+        assertEquals(1L, count("select count(*) from audit_records where customer_id = ? and action = 'UPDATE_FAILED'"
+                + " and resource_type = 'INVOICE'", tenant.customerId()), "the refused edit is recorded as a failure");
     }
 
     @Test
