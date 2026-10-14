@@ -23,7 +23,7 @@
                 <span class="inbox-body">
                     <span class="inbox-topic" th:text="${notification.notificationType}">EXPIRING</span>
                     <p th:text="${notification.message}">Your plan expires soon.</p>
-                    <small th:text="'Recorded ' + ${#strings.replace(notification.createdAt, 'T', ' ')} + (notification.status.name() == 'READ' ? ' · read' : ' · unread')">Recorded</small>
+                    <small th:text="${'Recorded ' + #strings.replace(notification.createdAt, 'T', ' ') + (notification.status.name() == 'READ' ? ' · read' : ' · unread')}">Recorded</small>
                 </span>
                 <form th:if="${notification.status.name() != 'READ'}" th:action="@{/portal/notifications/{id}/read(id=${notification.id})}" method="post"><button class="button button-small button-secondary" type="submit">Mark read</button></form>
             </li>
