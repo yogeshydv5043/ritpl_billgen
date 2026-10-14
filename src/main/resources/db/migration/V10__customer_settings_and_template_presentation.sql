@@ -106,3 +106,31 @@ CREATE INDEX IF NOT EXISTS idx_invoices_customer_status_issue ON invoices (custo
 CREATE INDEX IF NOT EXISTS idx_catalog_products_customer_name ON catalog_products (customer_id, name);
 CREATE INDEX IF NOT EXISTS idx_catalog_products_customer_active ON catalog_products (customer_id, active);
 CREATE INDEX IF NOT EXISTS idx_product_categories_customer_name ON product_categories (customer_id, name);
+
+-- ------------------------------------------------------------------- legacy invoices, given their own copies
+-- Before this migration an invoice read its layout from the live template row, so a listing page had to
+-- dereference a lazily loaded association, and an administrator editing a template changed what an old
+-- document appeared to have said. Copying the current values into the snapshot columns at upgrade time
+-- ends both: from here the snapshot is always present, and it is the same text the invoice was printed
+-- with on the day these columns arrived.
+UPDATE invoices i
+   SET template_name_snapshot   = COALESCE(i.template_name_snapshot, t.name),
+       template_style_snapshot  = COALESCE(i.template_style_snapshot, t.style_key),
+       template_accent_snapshot = COALESCE(i.template_accent_snapshot, t.accent_color)
+  FROM bill_templates t
+ WHERE i.template_id = t.id;
+
+UPDATE invoices i
+   SET template_name_snapshot          = COALESCE(i.template_name_snapshot, c.name),
+       template_style_snapshot          = COALESCE(i.template_style_snapshot, c.style_key),
+       template_accent_snapshot         = COALESCE(i.template_accent_snapshot, c.accent_color),
+       template_font_snapshot           = COALESCE(i.template_font_snapshot, c.font_key),
+       template_density_snapshot        = COALESCE(i.template_density_snapshot, c.layout_density),
+       template_terms_snapshot          = COALESCE(i.template_terms_snapshot, c.payment_terms),
+       template_footer_snapshot         = COALESCE(i.template_footer_snapshot, c.footer_text),
+       template_bank_snapshot           = COALESCE(i.template_bank_snapshot, c.bank_details),
+       template_show_logo_snapshot      = COALESCE(i.template_show_logo_snapshot, c.show_logo),
+       template_signature_label_snapshot = COALESCE(i.template_signature_label_snapshot, c.signature_label),
+       template_signature_name_snapshot = COALESCE(i.template_signature_name_snapshot, c.signature_name)
+  FROM custom_invoice_templates c
+ WHERE i.custom_template_id = c.id;

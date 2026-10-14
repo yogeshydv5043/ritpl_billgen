@@ -141,22 +141,16 @@ class PortalRenderSmokeTest {
 
         List<String> broken = new ArrayList<>();
         for (String route : routes) {
-            MvcResult result = mockMvc.perform(get(route).session(session.httpSession)).andReturn();
-            int status = result.getResponse().getStatus();
-            boolean redirected = status >= 300 && status < 400;
-            // A redirect is a legitimate answer for a page that decided the record is not editable here;
-            // anything else that is not a rendered 200 is a defect.
-            if (status != 200 && !redirected) broken.add(route + " -> HTTP " + status + explain(result));
-            if (status == 200 && route.endsWith(".pdf") && result.getResponse().getContentAsByteArray().length == 0) {
-                broken.add(route + " -> a PDF that contains nothing");
-            }
-            if (status == 200 && route.contains("/exports/")) {
-                byte[] body = result.getResponse().getContentAsByteArray();
-                if (body.length < 1024) broken.add(route + " -> an export of " + body.length + " bytes");
+            try {
+                checkRoute(route, session, broken);
+            } catch (Throwable failure) {
+                // MockMvc rethrows whatever the page threw, and an unrenderable page is exactly the thing
+                // this test exists to enumerate - so it is recorded, not propagated onto the other routes.
+                broken.add(route + " -> threw " + describe(failure));
             }
         }
-        // Two pages that must absorb the customer's own bad input: the list redraws itself with the
-        // reason, and the export refuses with a readable 400 instead of a stack-trace page.
+        // A page must absorb the customer's own bad input: the list redraws itself with the reason,
+        // and the export refuses with a readable 400 instead of a stack-trace page.
         MvcResult inverted = mockMvc.perform(get("/portal/invoices?from=2026-01-10&to=2026-01-01")
                 .session(session.httpSession)).andReturn();
         assertEquals(200, inverted.getResponse().getStatus(), "an inverted date range redraws the list" + explain(inverted));
@@ -174,6 +168,33 @@ class PortalRenderSmokeTest {
 
         assertTrue(broken.isEmpty(), () -> String.join("\n", broken));
     }
+
+    /**
+     * One route, one verdict. A redirect counts as an answer the page chose to give; anything other than
+     * a rendered page or a redirect is recorded with the reason, so the run reports every broken screen.
+     */
+    private void checkRoute(String route, Session session, List<String> broken) throws Exception {
+        MvcResult result = mockMvc.perform(get(route).session(session.httpSession)).andReturn();
+        int status = result.getResponse().getStatus();
+        boolean redirected = status >= 300 && status < 400;
+        if (status != 200 && !redirected) broken.add(route + " -> HTTP " + status + explain(result));
+        if (status == 200 && route.endsWith(".pdf") && result.getResponse().getContentAsByteArray().length == 0) {
+            broken.add(route + " -> a PDF that contains nothing");
+        }
+        if (status == 200 && route.contains("/exports/")) {
+            byte[] body = result.getResponse().getContentAsByteArray();
+            if (body.length < 1024) broken.add(route + " -> an export of " + body.length + " bytes");
+        }
+    }
+
+    private static String describe(Throwable failure) {
+        Throwable root = failure;
+        while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+        String message = String.valueOf(root.getMessage());
+        return root.getClass().getSimpleName() + ": "
+                + (message.length() > 400 ? message.substring(0, 400) + "..." : message);
+    }
+
 
     /** The form pages have to bind what they render, or the customer's own edits never reach the database. */
     @Test
