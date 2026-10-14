@@ -339,7 +339,8 @@ a.metric-card:hover, .metric-card:hover { border-color: var(--indigo-line); box-
 .badge:not(.badge)::before, .status-pill::before { display: none; }
 .status-active, .status-paid, .status-completed, .status-sent, .status-delivered, .status-read, .badge-ok { border-color: var(--ok-line); background: var(--ok-pale); color: var(--ok); }
 .status-draft, .status-pending, .status-scheduled, .status-paused, .badge-warn { border-color: var(--warn-line); background: var(--warn-pale); color: var(--warn); }
-.status-cancelled, .status-failed, .status-expired, .badge-bad { border-color: var(--bad-line); background: var(--bad-pale); color: var(--bad); }
+.status-partially-failed { border-color: var(--warn-line); background: var(--warn-pale); color: var(--warn); }
+.status-cancelled, .status-failed, .status-expired, .status-deleted, .badge-bad { border-color: var(--bad-line); background: var(--bad-pale); color: var(--bad); }
 .status-disabled, .status-inactive, .status-skipped, .badge-muted { border-color: var(--line-strong); background: var(--muted-pale); color: var(--ink-3); }
 .status-running, .badge-info { border-color: var(--indigo-line); background: var(--indigo-pale); color: var(--indigo); }
 .badge-soft { border-color: var(--line); background: var(--surface); color: var(--ink-2); }
@@ -601,6 +602,12 @@ body.nav-collapsed .theme-toggle { display: grid; }
 .table-wrap .wrap-cell { max-width: 52ch; overflow-wrap: anywhere; }
 .count-dot-muted { background: var(--ink-3); }
 .field-inline-actions { display: flex; align-items: flex-end; gap: 8px; }
+/* Two fact groups side by side: the account detail pages read as one wall of label/value rows
+   otherwise, and the second column is where the reader expects the comparison to start. */
+.two-column-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 22px; }
+.danger-zone-copy { min-width: 0; }
+.req { color: var(--bad); font-weight: 800; }
+@media (max-width: 900px) { .two-column-facts { grid-template-columns: minmax(0, 1fr); } }
 .tab-panel { padding: 18px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 var(--radius-lg) var(--radius-lg); background: var(--surface); }
 .tab-panel[hidden] { display: none; }
 .tabs[role='tablist'] { border-radius: var(--radius-lg) var(--radius-lg) 0 0; }

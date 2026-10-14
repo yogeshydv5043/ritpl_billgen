@@ -28,7 +28,7 @@
                     </form>
                     <div class="category-row-tools">
                         <form th:action="@{/portal/categories/{id}/toggle(id=${category.id})}" method="post"><button class="row-arrow" type="submit" th:attr="aria-label=${category.active ? 'Hide category' : 'Show category'}" th:text="${category.active ? '−' : '+'}">−</button></form>
-                        <form th:action="@{/portal/categories/{id}/delete(id=${category.id})}" method="post" onsubmit="return confirm('Delete this category? Its products will stay in your catalogue.')"><button class="row-arrow row-danger" type="submit" aria-label="Delete category">×</button></form>
+                        <form th:action="@{/portal/categories/{id}/delete(id=${category.id})}" method="post" data-confirm-title="Delete this category?" data-confirm-text="Its products stay in your catalogue and keep their prices and tax rates."><button class="row-arrow row-danger" type="submit" aria-label="Delete category">×</button></form>
                     </div>
                 </article>
                 <div class="empty-state" th:if="${page != null and page.empty}"><span class="empty-icon">▧</span><h2 th:text="${activeFilters} ? 'No category matches that search.' : 'Make products easier to find.'">Nothing here</h2><p th:text="${activeFilters} ? 'Clear the search to see all of your categories.' : 'Add a category, then assign it to your products.'">Nothing</p><a class="button button-quiet button-small" th:if="${activeFilters}" th:href="@{/portal/categories}">Clear search</a></div>
@@ -37,4 +37,6 @@
         </section>
     </div>
     <footer class="page-footer"><span>Your categories are never shared with another customer.</span><a th:href="@{/portal}">Back to my workspace ↗</a></footer>
-</div></main></div></body></html>
+</div></main></div><div th:replace="~{fragments/components :: confirmHost}"></div>
+</body>
+</html>

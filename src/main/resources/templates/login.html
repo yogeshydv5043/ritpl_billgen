@@ -23,6 +23,9 @@
                 <div class="notice notice-error" th:if="${param.error}">We couldn’t sign you in with those details. Please try again.</div>
                 <div class="notice notice-error" th:if="${param.blocked}">This account is disabled or has been closed. An administrator can enable it again.</div>
                 <div class="notice notice-success" th:if="${param.logout}">You’ve been signed out securely.</div>
+                <!-- The only sign that creating an account worked: the redirect carries a flash, and
+                     without this slot the customer was left on the sign-in card with no answer. -->
+                <div class="notice notice-success" th:if="${successMessage}" th:text="${successMessage}">Your account is ready.</div>
                 <form th:action="@{/login}" method="post" class="stack-form">
                     <label for="username">Email address</label>
                     <div class="input-with-icon"><span aria-hidden="true">✉</span><input id="username" name="username" type="email" autocomplete="username" placeholder="you@company.com" required autofocus></div>

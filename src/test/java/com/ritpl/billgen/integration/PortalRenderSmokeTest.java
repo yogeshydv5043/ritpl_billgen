@@ -196,6 +196,47 @@ class PortalRenderSmokeTest {
     }
 
 
+    /**
+     * The pages a company reaches before it has an account. They sit outside the panel and outside this
+     * test's session, and they are the ones a customer judges the product by, so each is asked for here:
+     * the sign-up form must render, and a refused application must come back with its own complaints
+     * beside the fields they belong to rather than as a fresh empty page.
+     */
+    @Test
+    void thePublicPagesRenderAndASignUpRefusalComesBackWithItsFields() throws Exception {
+        for (String route : List.of("/login", "/register", "/plans")) {
+            MvcResult page = mockMvc.perform(get(route)).andReturn();
+            assertEquals(200, page.getResponse().getStatus(), route + " is open to anyone" + explain(page));
+        }
+        MvcResult form = mockMvc.perform(get("/register")).andReturn();
+        String html = form.getResponse().getContentAsString();
+        assertTrue(html.contains("id=\"companyName\"") && html.contains("for=\"password\""),
+                "the sign-up form has to carry the fields it is bound to" + explain(form));
+        // The styling these pages share lives in classes both sheets define; a page that quietly loses
+        // its shell renders as bare HTML, which no test but this one would notice.
+        assertTrue(html.contains("auth-shell") && html.contains("auth-card"),
+                "sign-up has to be dressed like sign-in, or the two halves look like different products");
+
+        String token = csrfTokenFrom(mockMvc.perform(get("/register")).andReturn().getResponse().getContentAsString());
+        MvcResult refused = mockMvc.perform(post("/register").param("_csrf", token)
+                .param("companyName", "Ravi Textiles").param("contactName", "")
+                .param("email", "not-an-email").param("password", "short")).andReturn();
+        assertEquals(200, refused.getResponse().getStatus(),
+                "a refused application redraws the form instead of dropping it" + explain(refused));
+        String redrawn = refused.getResponse().getContentAsString();
+        assertTrue(redrawn.contains("Ravi Textiles"), "and hands back what the applicant already typed");
+        assertTrue(redrawn.contains("field-error"), "and marks the fields that were refused");
+
+        MvcResult signedUp = mockMvc.perform(post("/register").param("_csrf", token)
+                .param("companyName", "Ravi Textiles").param("contactName", "Ravi Kumar")
+                .param("email", "accounts@ravitextiles.example").param("country", "India")
+                .param("password", "Render!2026x")).andReturn();
+        assertEquals(302, signedUp.getResponse().getStatus(), "a valid application is accepted" + explain(signedUp));
+        assertEquals("redirect:/login", signedUp.getViewName());
+        assertTrue(jdbc.queryForObject("select count(*) from customers where email = ?", Long.class,
+                "accounts@ravitextiles.example") == 1L, "and the account exists before the customer signs in");
+    }
+
     /** The form pages have to bind what they render, or the customer's own edits never reach the database. */
     @Test
     void aCustomerCanSaveSettingsAddACatalogueItemAndIssueAnInvoiceThroughTheForms() throws Exception {
