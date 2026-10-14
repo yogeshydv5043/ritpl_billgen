@@ -232,7 +232,7 @@ class PortalRenderSmokeTest {
                 .param("email", "accounts@ravitextiles.example").param("country", "India")
                 .param("password", "Render!2026x")).andReturn();
         assertEquals(302, signedUp.getResponse().getStatus(), "a valid application is accepted" + explain(signedUp));
-        assertEquals("redirect:/login", signedUp.getViewName());
+        assertEquals("/login", signedUp.getResponse().getRedirectedUrl(), "and the customer is sent to sign in");
         assertTrue(jdbc.queryForObject("select count(*) from customers where email = ?", Long.class,
                 "accounts@ravitextiles.example") == 1L, "and the account exists before the customer signs in");
     }
