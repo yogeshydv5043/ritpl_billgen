@@ -188,10 +188,11 @@ public class InvoiceService {
         // Terms: the value typed on this invoice wins, then the template's, then the account's default.
         if (command != null && !isBlank(command.paymentTerms())) {
             invoice.setTemplateTermsSnapshot(command.paymentTerms().trim());
-        } else if (isBlank(invoice.getTemplateTermsSnapshot())) {
+        } else if (isBlank(invoice.getPaymentTerms())) {
+            // Nothing typed and nothing on the template: the account's own default fills in.
             invoice.setTemplateTermsSnapshot(blankToNull(preferences.getDefaultPaymentTerms()));
         }
-        if (isBlank(invoice.getTemplateFooterSnapshot())) invoice.setTemplateFooterSnapshot(blankToNull(preferences.getDefaultFooter()));
+        if (isBlank(invoice.getFooterText())) invoice.setTemplateFooterSnapshot(blankToNull(preferences.getDefaultFooter()));
     }
 
     /**

@@ -51,8 +51,6 @@ public class ProductCategoryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Product category not found."));
     }
 
-        @Transactional
-    @CacheEvict(cacheNames = "dashboard", allEntries = true)
     /** Paged, searchable category list for the owning account. */
     @Transactional(readOnly = true)
     public org.springframework.data.domain.Page<ProductCategory> page(TenantScope scope, String search,

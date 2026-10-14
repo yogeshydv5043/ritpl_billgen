@@ -3,11 +3,13 @@ package com.ritpl.billgen.web;
 import com.ritpl.billgen.entity.AuditHistoryPeriod;
 import com.ritpl.billgen.security.AppUserPrincipal;
 import com.ritpl.billgen.security.TenantScope;
+import com.ritpl.billgen.service.AuditFilter;
 import com.ritpl.billgen.service.AuditService;
 import com.ritpl.billgen.service.CustomerSettingsService;
 import com.ritpl.billgen.service.SubscriptionService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -33,14 +35,18 @@ public class AuditTrailController {
     public String admin(@AuthenticationPrincipal AppUserPrincipal principal, Model model, HttpServletRequest request,
             @RequestParam(required = false) Long customerId, @RequestParam(required = false) String actor, @RequestParam(required = false) String action,
             @RequestParam(required = false) String resourceType, @RequestParam(required=false) String outcome,
-            @RequestParam(required=false) LocalDate from, @RequestParam(required=false) LocalDate until, @RequestParam(defaultValue="0") int page) {
+            @RequestParam(required=false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required=false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate until,
+            @RequestParam(defaultValue="0") int page) {
         return listing(TenantScope.from(principal), model, request, page, actor, action, resourceType, outcome, from, until, customerId, true);
     }
     @GetMapping("/portal/audit")
     public String customer(@AuthenticationPrincipal AppUserPrincipal principal, Model model, HttpServletRequest request,
             @RequestParam(required = false) String actor, @RequestParam(required = false) String action,
             @RequestParam(required = false) String resourceType, @RequestParam(required=false) String outcome,
-            @RequestParam(required=false) LocalDate from, @RequestParam(required=false) LocalDate until, @RequestParam(defaultValue="0") int page) {
+            @RequestParam(required=false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required=false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate until,
+            @RequestParam(defaultValue="0") int page) {
         return listing(TenantScope.from(principal), model, request, page, actor, action, resourceType, outcome, from, until, null, false);
     }
     @GetMapping("/admin/audit/{id}")
@@ -68,7 +74,8 @@ public class AuditTrailController {
             records = audits.search(scope, new AuditFilter(customerId, actor, action, resourceType, outcome,
                     from == null ? null : from.atStartOfDay(zone).toInstant(),
                     until == null ? null : until.plusDays(1).atStartOfDay(zone).toInstant()),
-                    org.springframework.data.domain.PageRequest.of(Math.max(0, page), 50));
+                    org.springframework.data.domain.PageRequest.of(Math.max(0, page), 50,
+                            org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt")));
         } catch (IllegalArgumentException e) {
             // A window whose end is before its start is a user error, not an authorization failure.
             model.addAttribute("errorMessage", e.getMessage());
@@ -82,7 +89,7 @@ public class AuditTrailController {
             AuditHistoryPeriod period = settings.get(scope, scope.requireCustomerId()).getAuditHistoryPeriod();
             model.addAttribute("auditPeriod", period);
             model.addAttribute("earliestDate", earliest);
-            model.addAttribute("retentionNote", period == AuditHistoryPeriod.FIFTEEN_DAYS
+            model.addAttribute("retentionNote", period == AuditHistoryPeriod.DAYS_15
                     ? "Your " + period.getDisplayName() + " viewing window is in force. Older entries stay retained under company policy and are not deleted by shortening this choice."
                     : "Your " + period.getDisplayName() + " viewing window is in force. Deleting retained records is an authorised administrative action, not a setting.");
         }
@@ -90,11 +97,11 @@ public class AuditTrailController {
     }
 
     private String detail(TenantScope scope, long id, Model model, boolean admin) {
-        var record = audits.find(scope, id);
-        Map<String,Object> before=Map.of(), after=Map.of();
-        try { before=audits.json.readValue(record.getBeforeJson(), Map.class); after=audits.json.readValue(record.getAfterJson(), Map.class); }
-        catch (Exception ignored) { /* Missing or non-JSON audit details remain empty. */ }
-        model.addAttribute("record", record); model.addAttribute("before", before); model.addAttribute("after", after); model.addAttribute("adminView", admin);
+        // The record itself carries the before/after payload; the detail template renders it, so nothing
+        // here re-parses it into a shape the page would then have to ignore.
+        model.addAttribute("auditRecord", audits.findById(scope, id));
+        model.addAttribute("backUrl", admin ? "/admin/audit" : "/portal/audit");
+        model.addAttribute("adminView", admin);
         return "audit/detail";
     }
 }

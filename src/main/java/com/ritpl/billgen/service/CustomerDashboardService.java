@@ -127,7 +127,7 @@ public class CustomerDashboardService {
         List<InvoiceRow> recentInvoices = new ArrayList<>();
         for (Invoice invoice : invoices.recent(scope, 10)) {
             recentInvoices.add(new InvoiceRow(invoice.getId(), invoice.getInvoiceNumber(), invoice.getIssueDate(),
-                    invoice.getDueDate(), invoice.getStatus().getLabel(), invoice.getStatus().name(),
+                    invoice.getDueDate(), invoice.getStatus().getDisplayName(), invoice.getStatus().name(),
                     invoice.getTotalAmount(), invoice.getCurrency(),
                     invoice.getStatus() == InvoiceStatus.SENT && invoice.getDueDate() != null
                             && invoice.getDueDate().isBefore(today)));

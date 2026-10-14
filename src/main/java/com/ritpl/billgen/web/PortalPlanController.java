@@ -112,7 +112,7 @@ public class PortalPlanController {
         TenantScope scope = TenantScope.from(principal);
         long customerId = principal.requireCustomerId();
         try {
-            var plan = plans.findById(planId).orElseThrow(() -> new IllegalArgumentException("Choose a valid plan."));
+            var plan = plans.findById(planId);   // an unknown id is a 404 here, the same answer the API gives
             String wanted = cycle == null ? "" : cycle.trim().toUpperCase(java.util.Locale.ROOT);
             if (!wanted.isEmpty() && !wanted.equals("MONTHLY") && !wanted.equals("YEARLY")) {
                 throw new IllegalArgumentException("Choose a monthly or a yearly term.");

@@ -7,7 +7,12 @@
     <section class="page-title-row compact-title"><div><span class="kicker">WRITTEN BY THE PLATFORM, NOT BY US</span><h1>Notifications</h1><p class="page-lede">Expiry reminders, allowance warnings, payment confirmations and security notices for <strong th:text="${customer != null ? customer.companyName : 'your account'}">your account</strong>. A notice appears here only after the event it describes has actually happened.</p></div><a class="button button-secondary" th:href="@{/portal/settings}">Choose which alerts arrive <span>→</span></a></section>
 
     <section class="panel list-panel">
-        <div class="list-toolbar"><div class="list-count"><span class="count-dot"></span><strong th:text="${#lists.size(notifications)}">0</strong> notices</div><span class="toolbar-note">Newest first · the thirty most recent</span></div>
+        <div class="list-toolbar"><div class="list-count"><span class="count-dot"></span><strong th:text="${#lists.size(notifications)}">0</strong> notices</div><span class="toolbar-note">Newest first · the thirty most recent</span>
+            <span class="toolbar-note" th:if="${settings != null}">
+                <span th:if="${settings.notifyExpiryReminders}">expiry reminders on</span><span th:unless="${settings.notifyExpiryReminders}">expiry reminders off</span> ·
+                <span th:if="${settings.notifyQuotaAlerts}">quota alerts on</span><span th:unless="${settings.notifyQuotaAlerts}">quota alerts off</span> ·
+                <span th:if="${settings.notifyPaymentUpdates}">payment updates on</span><span th:unless="${settings.notifyPaymentUpdates}">payment updates off</span>
+            </span></div>
         <ul class="inbox-list">
             <li th:each="notification : ${notifications}" th:classappend="${notification.status.name() == 'READ'} ? ' is-read' : ''">
                 <span class="inbox-icon" th:switch="${notification.notificationType}">

@@ -9,6 +9,10 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import java.util.Map;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import com.ritpl.billgen.security.AppUserPrincipal;
 import com.ritpl.billgen.security.TenantScope;
@@ -63,7 +67,7 @@ public class PortalCategoryController {
             @Valid @ModelAttribute("categoryForm") CategoryForm form, BindingResult errors, Model model,
             RedirectAttributes redirect) {
         TenantScope scope = TenantScope.from(principal);
-        if (errors.hasErrors()) return list(principal, model);
+        if (errors.hasErrors()) return list(principal, model, null, 0, "name", "asc");  // the form keeps its invalid input; the search box stays empty
         try {
             categories.save(scope, null, form.getName(), form.getDescription());
             redirect.addFlashAttribute("successMessage", "Category added.");
@@ -78,7 +82,7 @@ public class PortalCategoryController {
             @Valid @ModelAttribute("categoryForm") CategoryForm form, BindingResult errors, Model model,
             RedirectAttributes redirect) {
         TenantScope scope = TenantScope.from(principal);
-        if (errors.hasErrors()) return list(principal, model);
+        if (errors.hasErrors()) return list(principal, model, null, 0, "name", "asc");  // the form keeps its invalid input; the search box stays empty
         try {
             categories.save(scope, id, form.getName(), form.getDescription());
             redirect.addFlashAttribute("successMessage", "Category updated.");

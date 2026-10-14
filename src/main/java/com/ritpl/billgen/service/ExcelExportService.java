@@ -145,8 +145,12 @@ public class ExcelExportService {
         try (SXSSFWorkbook workbook = new SXSSFWorkbook(100); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Styles styles = new Styles(workbook);
             Sheet sheet = workbook.createSheet("Invoices");
-            List<String> headings = List.of("Invoice Number", "Status", "Issue Date", "Due Date", "Buyer", "Company Snapshot",
-                    "Template Snapshot", "Currency", "Subtotal", "Tax", "Discount", "Total", "Allowance Counted", "Generated At");
+            // No buyer column: this application's invoice identity is the customer account itself, and the
+            // company and template columns below are the text captured when the invoice was issued, not a
+            // live join - so the sheet says exactly what the document said.
+            List<String> headings = List.of("Invoice Number", "Status", "Issue Date", "Due Date",
+                    "Company (as issued)", "Template (as issued)", "Currency", "Subtotal", "Tax", "Discount", "Total",
+                    "Allowance Counted", "Generated At");
             header(sheet, headings, styles.header());
             int rowNum = 1;
             for (Invoice invoice : invoices) {
@@ -155,9 +159,8 @@ public class ExcelExportService {
                 text(row, c++, invoice.getStatus() == null ? "" : invoice.getStatus().name(), styles.text());
                 text(row, c++, invoice.getIssueDate() == null ? "" : invoice.getIssueDate().toString(), styles.text());
                 text(row, c++, invoice.getDueDate() == null ? "" : invoice.getDueDate().toString(), styles.text());
-                text(row, c++, invoice.getBuyerName(), styles.text());
                 text(row, c++, invoice.getCompanyNameSnapshot(), styles.text());
-                text(row, c++, invoice.getTemplateName(), styles.text());
+                text(row, c++, invoice.getTemplateNameSnapshot(), styles.text());
                 text(row, c++, invoice.getCurrency(), styles.text());
                 decimal(row, c++, invoice.getSubtotal(), styles.money());
                 decimal(row, c++, invoice.getTaxAmount(), styles.money());
@@ -167,7 +170,7 @@ public class ExcelExportService {
                 text(row, c, invoice.getGeneratedAt() == null ? "" : TIME.format(invoice.getGeneratedAt().atZone(zone)), styles.text());
             }
             filterAndFreeze(sheet, rowNum, headings.size());
-            widths(sheet, 22, 14, 16, 16, 28, 34, 24, 12, 16, 16, 16, 18, 20, 26);
+            widths(sheet, 22, 14, 16, 16, 34, 24, 12, 16, 16, 16, 18, 20, 26);
 
             Sheet info = workbook.createSheet("Export Info");
             header(info, List.of("Field", "Value"), styles.header());
