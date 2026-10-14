@@ -40,13 +40,13 @@ public class NotificationService {
         this.notifications = notifications; this.deliveries = deliveries; this.emailSinks = emailSinks; this.audit = audit;
     }
 
-    /** The transport used for email: SMTP when a live one is configured, otherwise recording. */
     /** What the UI says about the mail transport; never throws when no sink bean is present. */
     public String transportLabel() {
         EmailSink sink = transport();
         return sink == null ? "No mail transport configured" : sink.describe();
     }
 
+    /** The transport used for email: SMTP when a live one is configured, otherwise just recording. */
     public EmailSink transport() {
         return emailSinks.stream().filter(EmailSink::isLive).findFirst()
                 .orElseGet(() -> emailSinks.isEmpty() ? null : emailSinks.get(0));
@@ -189,16 +189,24 @@ public class NotificationService {
         return created;
     }
 
-    /** Records a delivery a job has already rendered; the job owns the actual transport attempt. */
+    /**
+     * Records a delivery a job has already rendered; the job owns the actual transport attempt, so the
+     * outcome and the reason for a failure are passed in rather than invented here. Re-running a batch
+     * updates the same row - the idempotency key is per job, account and channel - so retrying a job
+     * cannot leave two history rows for one customer.
+     */
     @Transactional(propagation = Propagation.REQUIRED)
     public NotificationDelivery recordRendered(Notification notification, NotificationChannel channel, Customer customer,
-            String recipient, String title, String body, String idempotencyKey, DeliveryStatus status, Long jobId) {
+            String recipient, String title, String body, String idempotencyKey, DeliveryStatus status,
+            String failureDetail, Long jobId) {
         NotificationDelivery delivery = deliveries.findByIdempotencyKey(idempotencyKey).orElse(null);
         if (delivery == null) {
             delivery = new NotificationDelivery(notification, channel, customer, recipient, title, body, idempotencyKey);
         }
         delivery.setJobId(jobId);
-        delivery.mark(status, status == DeliveryStatus.FAILED ? "Transport reported a failure." : null);
+        delivery.mark(status, status == DeliveryStatus.FAILED
+                ? (failureDetail == null || failureDetail.isBlank() ? "Transport reported a failure." : failureDetail)
+                : null);
         return deliveries.save(delivery);
     }
 

@@ -131,7 +131,11 @@ public class SubscriptionPlan implements Serializable {
     public String getUpdatedBy(){return updatedBy;} public void setUpdatedBy(String v){updatedBy = v;}
     /** The window an invoice allowance is measured over, derived from the billing cycle. */
     public java.time.Period usageWindow(){
-        return switch (getBillingCycle()) {
+        // A plan saved before the cycle existed (or a bare fixture) still needs a usable window, so
+        // the switch is never handed a null: this method backs both the quota period and the default
+        // subscription term.
+        BillingCycle cycle = billingCycle == null ? BillingCycle.MONTHLY : billingCycle;
+        return switch (cycle) {
             case MONTHLY -> java.time.Period.ofMonths(1);
             case YEARLY -> java.time.Period.ofYears(1);
             case CUSTOM -> java.time.Period.ofDays(billingPeriodDays == null ? 30 : Math.max(1, billingPeriodDays));

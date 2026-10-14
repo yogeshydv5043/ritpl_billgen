@@ -43,8 +43,9 @@ public class TemplateService {
     @Transactional(readOnly = true)
     public List<BillTemplate> findLive() { return templates.findByDeletedAtIsNullOrderBySortOrderAscNameAsc(); }
 
+    /** Selectable templates: active and not retired, because a retired row is hidden everywhere. */
     @Transactional(readOnly = true)
-    public List<BillTemplate> findActive() { return templates.findByActiveTrueOrderBySortOrderAscNameAsc(); }
+    public List<BillTemplate> findActive() { return templates.findByActiveTrueAndDeletedAtIsNullOrderBySortOrderAscNameAsc(); }
 
     @Transactional(readOnly = true)
     public BillTemplate findById(long id) {
@@ -72,7 +73,11 @@ public class TemplateService {
 
     @Transactional
     @CacheEvict(cacheNames = {"active-plans", "customer-templates", "dashboard"}, allEntries = true)
-    public BillTemplate save(Long id, TemplateCommand command) {
+    public BillTemplate save(Long id, TemplateCommand command) { return save(id, command, "admin"); }
+
+    @Transactional
+    @CacheEvict(cacheNames = {"active-plans", "customer-templates", "dashboard"}, allEntries = true)
+    public BillTemplate save(Long id, TemplateCommand command, String actor) {
         validate(command);
         String code = command.code().trim().toUpperCase(Locale.ROOT);
         boolean duplicate = id == null ? templates.existsByCodeIgnoreCase(code) : templates.existsByCodeIgnoreCaseAndIdNot(code, id);
@@ -99,7 +104,7 @@ public class TemplateService {
         template.setPaymentTerms(blankToNull(command.paymentTerms()));
         template.setTermsAndConditions(blankToNull(command.termsAndConditions()));
         if (id != null) template.bumpVersion();
-        template.setUpdatedBy("admin");
+        template.setUpdatedBy(actor == null || actor.isBlank() ? "admin" : actor);
         BillTemplate saved = templates.save(template);
         audit.record(AuditEventCommand.success(null, id == null ? "CREATE" : "UPDATE", "TEMPLATE", "Bill template", saved.getId(),
                 id == null ? "Admin created a bill template." : "Admin updated a bill template.", before,
@@ -117,6 +122,10 @@ public class TemplateService {
     @CacheEvict(cacheNames = {"active-plans", "customer-templates", "dashboard"}, allEntries = true)
     public void setActive(long id, boolean active) {
         BillTemplate template = findById(id);
+        if (active && template.isDeleted()) {
+            throw new IllegalArgumentException("This template was retired. Its id stays reserved, so create a new "
+                    + "template instead of reviving it.");
+        }
         boolean before = template.isActive(); template.setActive(active);
         audit.record(AuditEventCommand.success(null, "UPDATE_STATUS", "TEMPLATE", "Bill template", id,
                 active ? "Admin activated a bill template for new invoices."
@@ -151,7 +160,6 @@ public class TemplateService {
                 Map.of("name", name), Map.of("retired", true)));
     }
 
-    /**
     /**
      * A static preview of the layout with sample data. It is deliberately plain HTML so the same
      * markup can be reused by the print stylesheet and by the PDF renderer. Attributes are quoted

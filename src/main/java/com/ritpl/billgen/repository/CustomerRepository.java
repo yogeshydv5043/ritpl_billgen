@@ -27,6 +27,8 @@ public interface CustomerRepository extends JpaRepository<Customer, Long>, JpaSp
 
     long countBySystemAccountFalseAndDeletedAtIsNullAndStatus(AccountStatus status);
     long countBySystemAccountFalseAndDeletedAtIsNullAndCreatedAtBetween(LocalDateTime from, LocalDateTime until);
+    /** Accounts that already existed at a point in time, for the dashboard's snapshot comparison. */
+    long countBySystemAccountFalseAndDeletedAtIsNullAndCreatedAtBefore(LocalDateTime before);
     long countBySystemAccountFalseAndDeletedAtIsNullAndStatusAndCreatedAtBetween(
             AccountStatus status, LocalDateTime from, LocalDateTime until);
 

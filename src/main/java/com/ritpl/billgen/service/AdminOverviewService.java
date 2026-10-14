@@ -55,9 +55,14 @@ public class AdminOverviewService {
     public record NewCustomer(long customerId, String companyName, String contactName, String email,
             LocalDateTime registeredOn, String accountStatus, String planName, LocalDate expiry, boolean deleted) { }
 
+    /**
+     * The dashboard's panels. Activity rows are maps rather than raw records because the timestamps are
+     * shown as a rounded phrase ("7 min ago") and a JPA entity has no such property; the record itself
+     * is carried along under {@code record} so the row still links to the full trail.
+     */
     public record Overview(List<Kpi> kpis, List<NewCustomer> newCustomers,
             List<CustomerSubscription> recentSubscriptions, List<Map<String, Object>> upcomingExpiries,
-            List<AuditRecord> recentActivity, List<BackgroundJob> attentionJobs,
+            List<Map<String, Object>> recentActivity, List<BackgroundJob> attentionJobs,
             List<Map<String, Object>> configurationChanges, Map<String, Long> jobCounts) { }
 
     @Transactional(readOnly = true)
@@ -69,7 +74,6 @@ public class AdminOverviewService {
     public Overview load() {
         LocalDate today = subscriptionService.today();
         LocalDateTime periodStart = today.minusDays(PERIOD_DAYS).atStartOfDay();
-        LocalDateTime previousStart = today.minusDays(PERIOD_DAYS * 2L).atStartOfDay();
 
         long total = customers.countBySystemAccountFalseAndDeletedAtIsNull();
         long active = customers.countBySystemAccountFalseAndDeletedAtIsNullAndStatus(AccountStatus.ACTIVE);
@@ -78,13 +82,18 @@ public class AdminOverviewService {
         long subscribed = subscriptions.countAccountsSubscribed(com.ritpl.billgen.entity.SubscriptionStatus.ACTIVE);
         long expiringSoon = customers.countExpiringBetween(today, today.plusDays(EXPIRY_WARNING_DAYS));
 
+        // A comparison is only shown where both sides measure the same thing. The account-status counts
+        // are snapshots of right now and nothing records when an account changed status, so counting the
+        // accounts *registered* in the previous window next to them would print a meaningless delta.
+        // The total is comparable: accounts are never destroyed, so the ones registered before the
+        // window started are what the list held then.
         List<Kpi> kpis = List.of(
-                new Kpi("total", "Total customers", total, null, "/customers", "◉", "neutral"),
-                new Kpi("active", "Active customers", active,
-                        customers.countBySystemAccountFalseAndDeletedAtIsNullAndStatusAndCreatedAtBetween(AccountStatus.ACTIVE, previousStart, periodStart),
+                new Kpi("total", "Total customers", total,
+                        customers.countBySystemAccountFalseAndDeletedAtIsNullAndCreatedAtBefore(periodStart),
+                        "/customers", "◉", "neutral"),
+                new Kpi("active", "Active customers", active, null,
                         "/customers?status=ACTIVE", "✓", "positive"),
-                new Kpi("disabled", "Disabled customers", disabled,
-                        customers.countBySystemAccountFalseAndDeletedAtIsNullAndStatusAndCreatedAtBetween(AccountStatus.DISABLED, previousStart, periodStart),
+                new Kpi("disabled", "Disabled customers", disabled, null,
                         "/customers?status=DISABLED", "⊘", "muted"),
                 new Kpi("no-subscription", "Without a subscription", withoutSubscription, null,
                         "/customers?subscribed=false", "◇", "warning"),
@@ -110,8 +119,11 @@ public class AdminOverviewService {
             upcomingExpiries.add(row);
         }
 
-        List<AuditRecord> recentActivity = auditRecords.search(null, null, null, null, null, null, null,
-                org.springframework.data.domain.PageRequest.of(0, 8)).getContent();
+        List<Map<String, Object>> recentActivity = new java.util.ArrayList<>();
+        for (AuditRecord record : auditRecords.search(null, null, null, null, null, null, null,
+                org.springframework.data.domain.PageRequest.of(0, 8)).getContent()) {
+            recentActivity.add(activityRow(record));
+        }
 
         List<BackgroundJob> attentionJobs = java.util.stream.Stream
                 .concat(jobs.findByStatusOrderByPriorityDescRunAtAsc(JobStatus.RUNNING).stream(),
@@ -147,8 +159,22 @@ public class AdminOverviewService {
     private Map<String, Object> activityRow(AuditRecord record) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("record", record);
-        row.put("when", record.getCreatedAt() == null ? "" : java.time.Duration.between(record.getCreatedAt(), Instant.now()).toMinutes());
+        row.put("when", relative(record.getCreatedAt()));
         return row;
+    }
+
+    /** Minutes turn into four-digit numbers within a day, so the phrase is rounded to a readable unit. */
+    private String relative(Instant at) {
+        if (at == null) return "";
+        long minutes = java.time.Duration.between(at, Instant.now()).toMinutes();
+        if (minutes < 1) return "just now";
+        if (minutes < 60) return minutes + " min ago";
+        long hours = minutes / 60;
+        if (hours < 24) return hours + (hours == 1 ? " hour ago" : " h ago");
+        long days = hours / 24;
+        if (days < 60) return days + (days == 1 ? " day ago" : " days ago");
+        long months = days / 30;
+        return months + (months == 1 ? " month ago" : " months ago");
     }
 
     /** The dashboard row for one account: identity plus the current term and plan. */

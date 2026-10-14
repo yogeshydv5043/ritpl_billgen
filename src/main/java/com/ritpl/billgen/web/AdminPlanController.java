@@ -62,10 +62,10 @@ public class AdminPlanController {
 
     @PostMapping
     public String create(@Valid @ModelAttribute("planForm") PlanForm planForm, BindingResult errors, Model model,
-            RedirectAttributes redirect) {
+            RedirectAttributes redirect, @org.springframework.security.core.annotation.AuthenticationPrincipal com.ritpl.billgen.security.AppUserPrincipal principal) {
         if (errors.hasErrors()) return form(model, "Add subscription plan", "/admin/plans");
         try {
-            plans.save(null, planForm.toCommand());
+            plans.save(null, planForm.toCommand(), (principal == null ? "admin" : principal.getUsername()));
             redirect.addFlashAttribute("successMessage", "Plan created.");
             return "redirect:/admin/plans";
         } catch (IllegalArgumentException e) {
@@ -82,10 +82,10 @@ public class AdminPlanController {
 
     @PostMapping("/{id}")
     public String update(@PathVariable long id, @Valid @ModelAttribute("planForm") PlanForm planForm, BindingResult errors,
-            Model model, RedirectAttributes redirect) {
+            Model model, RedirectAttributes redirect, @org.springframework.security.core.annotation.AuthenticationPrincipal com.ritpl.billgen.security.AppUserPrincipal principal) {
         if (errors.hasErrors()) return form(model, "Edit subscription plan", "/admin/plans/" + id);
         try {
-            plans.save(id, planForm.toCommand());
+            plans.save(id, planForm.toCommand(), (principal == null ? "admin" : principal.getUsername()));
             redirect.addFlashAttribute("successMessage", "Plan updated.");
             return "redirect:/admin/plans";
         } catch (IllegalArgumentException e) {

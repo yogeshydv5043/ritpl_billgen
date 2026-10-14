@@ -176,6 +176,31 @@ class SubscriptionServiceTest {
                 "a template outside the plan cannot be forced through a forged id");
     }
 
+    @Test
+    void aPlanTakenOffTheMarketKeepsServingAccountsAlreadyOnIt() {
+        // Grandfathering rule: entitlement follows the dates on the term, never the plan's shelf state.
+        // Deactivating a plan stops it being bought; it must not revoke what an account already holds.
+        SubscriptionPlan retired = plan(100, 50, 1);
+        when(retired.isActive()).thenReturn(false);
+        activeSubscriptionIs(activeSubscription(retired, 0));
+        when(invoices.countByUsageSubscription_IdAndUsageCountedTrue(any())).thenReturn(40L);
+        when(products.countByCustomer_Id(CUSTOMER_ID)).thenReturn(0L);
+        when(customTemplates.countByCustomer_IdAndActiveTrue(CUSTOMER_ID)).thenReturn(0L);
+
+        UsageQuota quota = service.usage(TenantScope.ofCustomer(CUSTOMER_ID), CUSTOMER_ID);
+
+        assertEquals(60L, quota.remainingInvoices(),
+                "an inactive plan must not silently cut off a customer mid-term");
+
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer()));
+        when(plans.findById(2L)).thenReturn(Optional.of(retired));
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> service.activate(TenantScope.ofCustomer(CUSTOMER_ID), CUSTOMER_ID, 2L, "admin@ritpl.test"));
+        assertTrue(refused.getMessage().contains("no longer offered"),
+                "the refusal belongs at the point of sale, where the message explains it: " + refused.getMessage());
+    }
+
     private void startRenewal(CustomerSubscription current, SubscriptionPlan nextPlan) {
         // Build the fixtures first: stubbing one mock inside another when(...) breaks Mockito.
         Customer owner = customer();

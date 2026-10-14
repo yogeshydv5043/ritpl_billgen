@@ -103,10 +103,10 @@ public class AdminTemplateController {
 
     @PostMapping
     public String create(@Valid @ModelAttribute("templateForm") TemplateForm form, BindingResult errors, Model model,
-            RedirectAttributes redirect) {
+            RedirectAttributes redirect, @org.springframework.security.core.annotation.AuthenticationPrincipal com.ritpl.billgen.security.AppUserPrincipal principal) {
         if (errors.hasErrors()) return form(model, "Add bill template", "/admin/templates", null);
         try {
-            templates.save(null, form.toCommand());
+            templates.save(null, form.toCommand(), (principal == null ? "admin" : principal.getUsername()));
             redirect.addFlashAttribute("successMessage", "Template created. Add it to a plan to unlock it for customers.");
             return "redirect:/admin/templates";
         } catch (IllegalArgumentException e) {
@@ -126,10 +126,10 @@ public class AdminTemplateController {
 
     @PostMapping("/{id}")
     public String update(@PathVariable long id, @Valid @ModelAttribute("templateForm") TemplateForm form, BindingResult errors,
-            Model model, RedirectAttributes redirect) {
+            Model model, RedirectAttributes redirect, @org.springframework.security.core.annotation.AuthenticationPrincipal com.ritpl.billgen.security.AppUserPrincipal principal) {
         if (errors.hasErrors()) return form(model, "Edit bill template", "/admin/templates/" + id, id);
         try {
-            templates.save(id, form.toCommand());
+            templates.save(id, form.toCommand(), (principal == null ? "admin" : principal.getUsername()));
             redirect.addFlashAttribute("successMessage", "Template updated.");
             return "redirect:/admin/templates";
         } catch (IllegalArgumentException e) {

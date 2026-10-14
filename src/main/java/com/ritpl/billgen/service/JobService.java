@@ -162,7 +162,11 @@ public class JobService {
         job.setStatus(JobStatus.RUNNING);
         job.setRunAt(Instant.now());
         job.setStartedAt(Instant.now());
+        // A paused or cancelled job is brought back whole: batches parked by a pause and rows
+        // cancelled by an earlier cancel are returned to the queue, otherwise "run now" would start
+        // a job that has no runnable batch and it would sit in RUNNING forever.
         transitionBatches(id, JobBatchStatus.CANCELLED, JobBatchStatus.PENDING);
+        transitionBatches(id, JobBatchStatus.PAUSED, JobBatchStatus.PENDING);
         audit.record(AuditEventCommand.success(null, "RUN", "JOB", "Background job", id,
                 "Administrator started a background job.", null, Map.of("status", "RUNNING", "actor", actor)));
         return job;
@@ -203,12 +207,13 @@ public class JobService {
         }
         job.setStatus(JobStatus.CANCELLED);
         job.setFinishedAt(Instant.now());
-        transitionBatches(id, JobBatchStatus.PENDING, JobBatchStatus.CANCELLED);
-        transitionBatches(id, JobBatchStatus.PAUSED, JobBatchStatus.CANCELLED);
+        long cancelled = transitionBatches(id, JobBatchStatus.PENDING, JobBatchStatus.CANCELLED)
+                + transitionBatches(id, JobBatchStatus.PAUSED, JobBatchStatus.CANCELLED);
         audit.record(AuditEventCommand.success(null, "CANCEL", "JOB", "Background job", id,
-                "Administrator cancelled a background job; undelivered recipients were marked cancelled.", null,
+                "Administrator cancelled a background job; its undelivered batches were cancelled and nothing more is sent.",
+                null,
                 Map.of("processed", job.getProcessedCount(), "remaining", job.getEligibleCount() - job.getProcessedCount(),
-                        "actor", actor)));
+                        "batchesCancelled", cancelled, "actor", actor)));
         return job;
     }
 
@@ -285,13 +290,17 @@ public class JobService {
         jobs.save(job);
     }
 
-    private void transitionBatches(long jobId, JobBatchStatus from, JobBatchStatus to) {
+    /** Moves every batch of a job from one status to another and returns how many moved. */
+    private int transitionBatches(long jobId, JobBatchStatus from, JobBatchStatus to) {
+        int moved = 0;
         for (JobBatch batch : batches.findByJob_IdOrderByBatchNumberAsc(jobId)) {
             if (batch.getStatus() == from) {
                 batch.setStatus(to);
                 batches.save(batch);
+                moved++;
             }
         }
+        return moved;
     }
 
     private void validate(JobCommand command) {

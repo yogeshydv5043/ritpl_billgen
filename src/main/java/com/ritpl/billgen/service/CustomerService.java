@@ -349,8 +349,13 @@ public class CustomerService {
         AccountStatus before = customer.getStatus();
         if (before == status) return customer;
         customer.setStatus(status);
-        // Login availability follows the account: a disabled company cannot authenticate.
-        users.findByCustomer_Id(id).ifPresent(login -> login.setEnabled(status == AccountStatus.ACTIVE));
+        // Blocking an account blocks its login, but enabling one does not silently re-open a login an
+        // administrator had switched off on its own: only the blocking direction is written here, and
+        // sign-in stays refused while the account is unusable because the authentication check ANDs the
+        // two switches.
+        if (status != AccountStatus.ACTIVE) {
+            users.findByCustomer_Id(id).ifPresent(login -> login.setEnabled(false));
+        }
         audit.record(AuditEventCommand.success(id, status == AccountStatus.ACTIVE ? "ENABLE" : "DISABLE", "CUSTOMER",
                 "Customer account", id, "Administrator changed a customer account's availability.",
                 Map.of("status", before.name()), Map.of("status", status.name(), "actor", actor == null ? "admin" : actor)));
@@ -401,6 +406,7 @@ public class CustomerService {
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("Record why the account is being deleted.");
         }
+        AccountStatus previous = customer.getStatus();
         customer.setDeletedAt(java.time.Instant.now());
         customer.setDeletedBy(actor == null ? "admin" : actor);
         customer.setDeletionReason(reason.trim().length() > 400 ? reason.trim().substring(0, 400) : reason.trim());
@@ -413,7 +419,7 @@ public class CustomerService {
                 });
         audit.record(AuditEventCommand.success(id, "SOFT_DELETE", "CUSTOMER", "Customer account", id,
                 "Administrator soft-deleted a customer account; invoices and audit history were preserved.",
-                Map.of("status", "ACTIVE"),
+                Map.of("status", previous.name(), "outstandingInvoices", assessment.get("outstandingInvoices")),
                 Map.of("deleted", true, "reason", customer.getDeletionReason(),
                         "outstandingInvoices", assessment.get("outstandingInvoices"),
                         "activeSubscription", assessment.get("activeSubscription"))));

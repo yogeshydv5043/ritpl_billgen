@@ -146,12 +146,12 @@
                         </div>
                         <div class="panel-body">
                             <ol class="timeline">
-                                <li th:each="event : ${overview.recentActivity}">
+                                <li th:each="row : ${overview.recentActivity}" th:with="event=${row.record}">
                                     <span class="node" th:classappend="${event.outcome == 'FAILURE'} ? ' is-bad' : ' is-ok'"></span>
                                     <div>
                                         <div class="timeline-head">
                                             <strong th:text="${event.summary}">Summary</strong>
-                                            <time th:attr="datetime=${event.createdAt}" th:text="${event.createdAt}">when</time>
+                                            <time th:attr="datetime=${event.createdAt}" th:text="${row.when}">when</time>
                                         </div>
                                         <p><span th:text="${event.actor}">actor</span> · <span class="table-id" th:text="${event.action} + ' / ' + ${event.resourceType}">ACTION</span></p>
                                     </div>
@@ -194,7 +194,7 @@
                                     <div>
                                         <div class="timeline-head"><strong th:text="${row.record.summary}">Change</strong>
                                             <time th:text="${row.record.actor}">actor</time></div>
-                                        <p th:text="'Resource ' + ${row.record.resourceType} + ' · ' + ${row.when} + ' min ago'">detail</p>
+                                        <p th:text="'Resource ' + ${row.record.resourceType} + ' · ' + ${row.when}">detail</p>
                                     </div>
                                 </li>
                                 <li th:if="${overview == null or #lists.isEmpty(overview.configurationChanges)}"><span class="node is-muted"></span><div><p>No configuration changes in the last 30 days.</p></div></li>

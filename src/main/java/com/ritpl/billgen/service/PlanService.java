@@ -183,6 +183,11 @@ public class PlanService {
     @CacheEvict(cacheNames = {"active-plans", "customer-templates", "dashboard"}, allEntries = true)
     public SubscriptionPlan setTemplates(long id, Set<Long> templateIds) {
         SubscriptionPlan plan = findById(id);
+        if (templateIds == null || templateIds.isEmpty()) {
+            // The same rule the form enforces: a plan without a template cannot be invoiced on, and
+            // accounts already holding it would be left with nothing to select.
+            throw new IllegalArgumentException("Keep at least one bill template on a plan.");
+        }
         int beforeCount = plan.getTemplates().size();
         plan.setTemplates(resolveTemplates(templateIds));
         SubscriptionPlan saved = plans.save(plan);
@@ -220,7 +225,7 @@ public class PlanService {
         Set<BillTemplate> resolved = new LinkedHashSet<>();
         if (templateIds == null || templateIds.isEmpty()) return resolved;
         for (BillTemplate template : templates.findByIds(templateIds)) {
-            if (template.isActive()) resolved.add(template);
+            if (template.isActive() && !template.isDeleted()) resolved.add(template);
         }
         if (resolved.size() != templateIds.size()) {
             throw new IllegalArgumentException("One of the selected templates is not available.");

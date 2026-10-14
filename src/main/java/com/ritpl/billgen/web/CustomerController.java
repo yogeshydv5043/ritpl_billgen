@@ -114,16 +114,18 @@ public class CustomerController {
 
     @PostMapping
     public String create(@Valid @ModelAttribute("customerForm") CustomerForm form, BindingResult errors,
-            Model model, RedirectAttributes redirect) {
+            Model model, RedirectAttributes redirect,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
         if (errors.hasErrors()) return form(model, "Add customer account", "/customers", null);
         try {
+            String actor = principal == null ? "admin" : principal.getUsername();
             var customer = customers.createAccount(TenantScope.administrator(), form.toCommand());
             if (form.isDisabled()) {
-                customers.setAccountStatus(TenantScope.administrator(), customer.getId(), AccountStatus.DISABLED, "admin");
+                customers.setAccountStatus(TenantScope.administrator(), customer.getId(), AccountStatus.DISABLED, actor);
             }
             if (form.getPlanId() != null) {
                 subscriptions.activate(TenantScope.administrator(), customer.getId(), form.getPlanId(),
-                        "admin", form.getStartedOn(), form.getEndsOn());
+                        actor, form.getStartedOn(), form.getEndsOn());
             }
             redirect.addFlashAttribute("successMessage", "Customer account created.");
             return "redirect:/customers/" + customer.getId();

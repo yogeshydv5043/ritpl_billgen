@@ -162,7 +162,7 @@ public class DemoDataInitializer implements CommandLineRunner {
                     .findFirst().orElse(null);
             if (existing == null) {
                 planService.save(null, plan);
-            } else if (existing.getTemplates().isEmpty()) {
+            } else if (existing.getTemplates().isEmpty() && !plan.templateIds().isEmpty()) {
                 // Upgrade old seeded plans after V2 so existing demo accounts receive their
                 // expected template entitlements without overwriting administrator choices.
                 planService.setTemplates(existing.getId(), plan.templateIds());

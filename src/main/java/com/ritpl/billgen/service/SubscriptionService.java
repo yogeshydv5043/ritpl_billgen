@@ -59,11 +59,17 @@ public class SubscriptionService {
     }
     public ZoneId zone() { return zone; }
 
+    /**
+     * The term the account is currently serving. A plan withdrawn from new subscribers does not end
+     * the terms already sold on it - deactivating a plan closes it to new business only - so the gate
+     * here is the term's own dates, never {@code plan.isActive()}. Renewal into a withdrawn plan is
+     * refused separately by {@link #activate}, which is where "new subscribers" actually means something.
+     */
     @Transactional(readOnly = true)
     public Optional<CustomerSubscription> findActiveSubscription(TenantScope scope, long customerId) {
         scope.requireCustomerAccess(customerId);
         return subscriptions.findFirstByCustomer_IdAndStatus(customerId, SubscriptionStatus.ACTIVE)
-                .filter(subscription -> subscription.isEffective(today()) && subscription.getPlan().isActive());
+                .filter(subscription -> subscription.isEffective(today()));
     }
 
     @Transactional(readOnly = true)
@@ -92,7 +98,10 @@ public class SubscriptionService {
     public CustomerSubscription requireActiveForUpdate(TenantScope scope) {
         long customerId = scope.requireCustomerId();
         CustomerSubscription current = subscriptions.findForUpdate(customerId, SubscriptionStatus.ACTIVE)
-                .filter(s -> s.isEffective(today()) && s.getPlan().isActive())
+                // Same rule as the read path: an in-term subscription keeps its entitlement even when
+                // the plan is no longer offered, otherwise deactivating a plan would silently cut off
+                // billing for the accounts grandfathered onto it.
+                .filter(s -> s.isEffective(today()))
                 .orElseThrow(() -> new IllegalArgumentException("Choose or renew an active plan before creating billing data."));
         return current;
     }
@@ -128,10 +137,14 @@ public class SubscriptionService {
         Customer customer = customers.findById(customerId).filter(account -> !account.isSystemAccount())
                 .orElseThrow(() -> new ResourceNotFoundException("Customer account not found."));
         SubscriptionPlan plan = plans.findById(planId).orElseThrow(() -> new IllegalArgumentException("Choose a valid plan."));
-        if (!plan.isActive()) throw new IllegalArgumentException("That plan is no longer available.");
+        if (plan.isDeleted()) throw new IllegalArgumentException("That plan has been retired and cannot be assigned.");
+        if (!plan.isActive()) throw new IllegalArgumentException("That plan is no longer offered to new subscribers.");
         LocalDate today = today();
         LocalDate start = requestedStart == null ? today : requestedStart;
-        LocalDate end = requestedEnd == null ? start.plusMonths(1).minusDays(1) : requestedEnd;
+        // The default term follows the plan's own billing cycle: a yearly plan must not be sold a
+        // month by default. An explicitly requested period always wins.
+        java.time.Period window = plan.usageWindow() == null ? java.time.Period.ofMonths(1) : plan.usageWindow();
+        LocalDate end = requestedEnd == null ? start.plus(window).minusDays(1) : requestedEnd;
         if (start.isAfter(today) || end.isBefore(today) || end.isBefore(start)) {
             throw new IllegalArgumentException("An active subscription must start on or before today and end on or after today.");
         }

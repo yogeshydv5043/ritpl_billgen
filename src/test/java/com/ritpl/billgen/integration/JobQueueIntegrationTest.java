@@ -175,7 +175,7 @@ class JobQueueIntegrationTest {
         BackgroundJob job = newJob(newNotification(suffix), suffix, 5, 0, Set.of(first, second));
         jobs.runNow(TenantScope.administrator(), job.getId(), "tester");
 
-        assertTrue(worker.processNextBatchForTests(), "the worker takes the first batch");
+        assertTrue(worker.processNextBatch(), "the worker takes the first batch");
         assertEquals(1, scalar("processed_count", job),
                 "one batch of one account is counted in the database, not the whole audience kept in memory");
         assertEquals(1, count("select count(*) from notification_deliveries where job_id = ?", job),
@@ -185,10 +185,10 @@ class JobQueueIntegrationTest {
                 "with no mail transport configured the send is recorded as simulated, not claimed as delivered");
         assertEquals(1, count("select count(*) from job_recipients where job_id = ? and status <> 'PENDING'", job));
 
-        assertTrue(worker.processNextBatchForTests(), "the second batch is still runnable");
+        assertTrue(worker.processNextBatch(), "the second batch is still runnable");
         assertEquals(2, scalar("processed_count", job));
         assertEquals(2, scalar("success_count", job));
-        assertFalse(worker.processNextBatchForTests(), "an empty queue reports that there was nothing to do");
+        assertFalse(worker.processNextBatch(), "an empty queue reports that there was nothing to do");
         assertEquals("COMPLETED", jdbc.queryForObject("select status from background_jobs where id = ?",
                 String.class, job.getId()), "the job status is derived from its finished batches");
         assertEquals(0, count("select count(*) from job_recipients where job_id = ? and status = 'FAILED'", job),
