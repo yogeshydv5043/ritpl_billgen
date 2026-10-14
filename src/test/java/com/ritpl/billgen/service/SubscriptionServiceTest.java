@@ -51,11 +51,13 @@ class SubscriptionServiceTest {
 
     @Test
     void usageReportsEffectiveLimitsAndRemainingAllowance() {
+        // The template count is the designs the account holds, hidden ones included: the same basis the
+        // service enforces when it refuses to create another.
         CustomerSubscription subscription = activeSubscription(plan(100, 50, 3), 0);
         activeSubscriptionIs(subscription);
         when(invoices.countByUsageSubscription_IdAndUsageCountedTrue(any())).thenReturn(40L);
         when(products.countByCustomer_Id(CUSTOMER_ID)).thenReturn(5L);
-        when(customTemplates.countByCustomer_IdAndActiveTrue(CUSTOMER_ID)).thenReturn(3L);
+        when(customTemplates.countByCustomer_IdAndDeletedAtIsNull(CUSTOMER_ID)).thenReturn(3L);
 
         UsageQuota quota = service.usage(TenantScope.ofCustomer(CUSTOMER_ID), CUSTOMER_ID);
 
@@ -74,7 +76,7 @@ class SubscriptionServiceTest {
         activeSubscriptionIs(activeSubscription(plan(100, 50, 3), 10));
         when(invoices.countByUsageSubscription_IdAndUsageCountedTrue(any())).thenReturn(40L);
         when(products.countByCustomer_Id(CUSTOMER_ID)).thenReturn(0L);
-        when(customTemplates.countByCustomer_IdAndActiveTrue(CUSTOMER_ID)).thenReturn(0L);
+        when(customTemplates.countByCustomer_IdAndDeletedAtIsNull(CUSTOMER_ID)).thenReturn(0L);
 
         UsageQuota quota = service.usage(TenantScope.ofCustomer(CUSTOMER_ID), CUSTOMER_ID);
 
@@ -185,7 +187,7 @@ class SubscriptionServiceTest {
         activeSubscriptionIs(activeSubscription(retired, 0));
         when(invoices.countByUsageSubscription_IdAndUsageCountedTrue(any())).thenReturn(40L);
         when(products.countByCustomer_Id(CUSTOMER_ID)).thenReturn(0L);
-        when(customTemplates.countByCustomer_IdAndActiveTrue(CUSTOMER_ID)).thenReturn(0L);
+        when(customTemplates.countByCustomer_IdAndDeletedAtIsNull(CUSTOMER_ID)).thenReturn(0L);
 
         UsageQuota quota = service.usage(TenantScope.ofCustomer(CUSTOMER_ID), CUSTOMER_ID);
 

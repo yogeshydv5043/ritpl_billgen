@@ -311,15 +311,14 @@ class PortalRenderSmokeTest {
         String email = suffix + "@example.test";
         BillTemplate template = templateService.save(null, new TemplateCommand("RS-" + suffix, "RS layout " + suffix,
                 null, BillTemplateStyle.CLASSIC, "#2563EB", true, 1));
-        planService.save(null, new PlanCommand("RS-" + suffix, "RS plan " + suffix, "render", "smoke",
-                new BigDecimal("499.00"), new BigDecimal("4990.00"), "INR", 1, 8, 50, 2, "rendering", false, true, 1,
-                Set.of(template.getId())));
+        com.ritpl.billgen.entity.SubscriptionPlan plan = planService.save(null,
+                new PlanCommand("RS-" + suffix, "RS plan " + suffix, "render", "smoke", new BigDecimal("499.00"),
+                        new BigDecimal("4990.00"), "INR", 1, 8, 50, 2, "rendering", false, true, 1,
+                        Set.of(template.getId())));
         Customer customer = customerService.register(new RegistrationCommand("Render Traders " + suffix, "Owner",
                 email, "9888800000", "India", PASSWORD));
         TenantScope scope = TenantScope.ofCustomer(customer.getId());
-        subscriptionService.activate(TenantScope.administrator(), customer.getId(),
-                jdbc.queryForObject("select id from subscription_plans where code = ?", Long.class, "RS-" + suffix),
-                "it-admin");
+        subscriptionService.activate(TenantScope.administrator(), customer.getId(), plan.getId(), "it-admin");
         settings.save(scope, new CustomerSettingsCommand(null, null, "INR", "RS-", 14, null, null, null, null, "hour",
                 null, 20, AuditHistoryPeriod.ONE_YEAR, true, true, true, true, 90));
         categories.save(scope, null, "Render category", "Seeded for the category pages.");

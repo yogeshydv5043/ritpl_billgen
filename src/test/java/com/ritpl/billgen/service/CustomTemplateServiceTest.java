@@ -2,6 +2,8 @@ package com.ritpl.billgen.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -50,7 +52,7 @@ class CustomTemplateServiceTest {
         CustomerSubscription subscription = subscription(1);
         when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(owner));
         when(subscriptions.requireActiveForUpdate(any())).thenReturn(subscription);
-        when(templates.countByCustomer_IdAndActiveTrue(CUSTOMER_ID)).thenReturn(1L);
+        when(templates.countByCustomer_IdAndDeletedAtIsNull(CUSTOMER_ID)).thenReturn(1L);
 
         assertThrows(IllegalArgumentException.class,
                 () -> service.save(TenantScope.ofCustomer(CUSTOMER_ID), null, command("Autumn brand", true)));
@@ -65,7 +67,7 @@ class CustomTemplateServiceTest {
         CustomerSubscription subscription = subscription(1);
         when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(owner));
         when(subscriptions.requireActiveForUpdate(any())).thenReturn(subscription);
-        when(templates.countByCustomer_IdAndActiveTrue(CUSTOMER_ID)).thenReturn(0L);
+        when(templates.countByCustomer_IdAndDeletedAtIsNull(CUSTOMER_ID)).thenReturn(0L);
         when(templates.save(any(CustomInvoiceTemplate.class))).thenReturn(saved);
 
         CustomInvoiceTemplate result = service.save(TenantScope.ofCustomer(CUSTOMER_ID), null, command("Autumn brand", true));
@@ -110,6 +112,7 @@ class CustomTemplateServiceTest {
         service.delete(TenantScope.ofCustomer(CUSTOMER_ID), 4L);
 
         assertFalse(template.isActive(), "the template is deactivated instead of destroyed");
+        assertNotNull(template.getDeletedAt(), "and it is retired, which is what stops it using a plan slot");
         verify(templates, never()).delete(any(CustomInvoiceTemplate.class));
     }
 
@@ -149,5 +152,37 @@ class CustomTemplateServiceTest {
         CustomerSubscription subscription = mock(CustomerSubscription.class);
         when(subscription.getEffectiveCustomTemplateLimit()).thenReturn(customTemplateLimit);
         return subscription;
+    }
+
+    /**
+     * Hiding is a presentation choice, not a way to mint capacity. A design that is merely hidden still
+     * occupies its slot, so an account on a one-design plan cannot keep an unlimited gallery by turning
+     * each design off in turn.
+     */
+    @Test
+    void aHiddenDesignStillOccupiesItsSlotInThePlan() {
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer()));
+        when(subscriptions.requireActiveForUpdate(any())).thenReturn(subscription(1));
+        when(templates.countByCustomer_IdAndDeletedAtIsNull(CUSTOMER_ID)).thenReturn(1L);
+
+        IllegalArgumentException refusal = assertThrows(IllegalArgumentException.class,
+                () -> service.save(TenantScope.ofCustomer(CUSTOMER_ID), null, command("Second brand", false)));
+
+        assertTrue(refusal.getMessage().contains("Hiding a design does not free its slot"), refusal.getMessage());
+        verify(templates, never()).save(any(CustomInvoiceTemplate.class));
+    }
+
+    /** A retired design is kept for the documents that used it, not for the customer to bring back. */
+    @Test
+    void aRetiredDesignCannotBeEditedOrReactivated() {
+        CustomInvoiceTemplate retired = ownedTemplate();
+        retired.setDeletedAt(java.time.Instant.now());
+        when(templates.findByIdAndCustomer_Id(4L, CUSTOMER_ID)).thenReturn(Optional.of(retired));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.setActive(TenantScope.ofCustomer(CUSTOMER_ID), 4L, true));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.save(TenantScope.ofCustomer(CUSTOMER_ID), 4L, command("Autumn brand", true)));
+        verify(templates, never()).save(any(CustomInvoiceTemplate.class));
     }
 }
