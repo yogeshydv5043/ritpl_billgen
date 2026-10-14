@@ -161,8 +161,10 @@ class CustomTemplateServiceTest {
      */
     @Test
     void aHiddenDesignStillOccupiesItsSlotInThePlan() {
-        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer()));
-        when(subscriptions.requireActiveForUpdate(any())).thenReturn(subscription(1));
+        Customer owner = customer();
+        CustomerSubscription subscription = subscription(1);
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(owner));
+        when(subscriptions.requireActiveForUpdate(any())).thenReturn(subscription);
         when(templates.countByCustomer_IdAndDeletedAtIsNull(CUSTOMER_ID)).thenReturn(1L);
 
         IllegalArgumentException refusal = assertThrows(IllegalArgumentException.class,
@@ -175,7 +177,9 @@ class CustomTemplateServiceTest {
     /** A retired design is kept for the documents that used it, not for the customer to bring back. */
     @Test
     void aRetiredDesignCannotBeEditedOrReactivated() {
+        Customer owner = customer();
         CustomInvoiceTemplate retired = ownedTemplate();
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(owner));
         retired.setDeletedAt(java.time.Instant.now());
         when(templates.findByIdAndCustomer_Id(4L, CUSTOMER_ID)).thenReturn(Optional.of(retired));
 

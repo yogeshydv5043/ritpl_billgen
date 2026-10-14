@@ -65,8 +65,13 @@ import com.ritpl.billgen.service.TemplateService;
 @SpringBootTest(properties = {
         "app.demo.seed-enabled=false",
         "app.jobs.enabled=false",
-        "spring.session.store-type=none",
         "spring.cache.type=none",
+        // Boot 3 infers the session store from the classpath, and spring-session-data-redis is on it, so
+        // a web test has to take the session store out of the picture: without this the sign-in POST
+        // tries to write the session into a Redis that no test is running.
+        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.session.SessionAutoConfiguration,"
+                + "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration,"
+                + "org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration",
         "app.subscription.time-zone=UTC",
         "spring.datasource.hikari.maximum-pool-size=20"
 })
