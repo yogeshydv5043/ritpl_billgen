@@ -56,16 +56,16 @@ public class CustomerDashboardService {
     private final ProductCategoryRepository categoryRepository;
     private final CustomInvoiceTemplateRepository customTemplates;
     private final SubscriptionService subscriptions;
-    private final AuditService audit;
+    private final com.ritpl.billgen.repository.AuditRecordRepository auditRecords;
     private final CustomerSettingsService settings;
 
     public CustomerDashboardService(InvoiceService invoices, InvoiceRepository invoiceRepository, CatalogService catalog,
             ProductCategoryService categories, ProductCategoryRepository categoryRepository,
-            CustomInvoiceTemplateRepository customTemplates, SubscriptionService subscriptions, AuditService audit,
-            CustomerSettingsService settings) {
+            CustomInvoiceTemplateRepository customTemplates, SubscriptionService subscriptions,
+            com.ritpl.billgen.repository.AuditRecordRepository auditRecords, CustomerSettingsService settings) {
         this.invoices = invoices; this.invoiceRepository = invoiceRepository; this.catalog = catalog;
         this.categories = categories; this.categoryRepository = categoryRepository; this.customTemplates = customTemplates;
-        this.subscriptions = subscriptions; this.audit = audit; this.settings = settings;
+        this.subscriptions = subscriptions; this.auditRecords = auditRecords; this.settings = settings;
     }
 
     @Transactional(readOnly = true)
@@ -153,10 +153,11 @@ public class CustomerDashboardService {
 
         List<AuditRow> recentActivity = new ArrayList<>();
         // The account's own viewing window applies here too, so the dashboard cannot show history that
-        // the same account has chosen to keep out of its listings.
-        AuditFilter filter = new AuditFilter(null, null, null, null, null, settings.auditWindowStart(customerId), null);
-        for (AuditRecord record : audit.search(scope, filter,
-                PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "createdAt"))).getContent()) {
+        // the same account has chosen to keep out of its listings. Read straight from the repository on
+        // purpose: opening a dashboard is not an audit-trail access, and routing it through the search
+        // service would write a view record on every page load - the history would grow by watching.
+        for (AuditRecord record : auditRecords.findTop10ByCustomerIdAndCreatedAtAfterOrderByCreatedAtDesc(
+                customerId, settings.auditWindowStart(customerId))) {
             recentActivity.add(new AuditRow(record.getId(), record.getAction(), record.getResourceType(),
                     record.getSummary(), record.getActor(), record.getCreatedAt(),
                     "FAILURE".equals(record.getOutcome())));

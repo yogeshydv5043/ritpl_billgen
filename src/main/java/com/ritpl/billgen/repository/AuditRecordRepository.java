@@ -37,6 +37,14 @@ public interface AuditRecordRepository extends JpaRepository<AuditRecord, Long> 
             java.time.Instant from, java.time.Instant until);
     long countByCustomerIdAndCreatedAtAfter(Long customerId, java.time.Instant from);
 
+    /**
+     * The newest rows inside a window, for a screen that must not write anything. The audit service's
+     * paged search deliberately logs an access record of its own, which is right for the audit trail and
+     * wrong for a dashboard that is only showing ten lines.
+     */
+    java.util.List<AuditRecord> findTop10ByCustomerIdAndCreatedAtAfterOrderByCreatedAtDesc(Long customerId,
+            Instant after);
+
     /** Oldest retained instant per definition, shown on the audit configuration screens. */
     @Query("select min(a.createdAt) from AuditRecord a where a.auditTypeId = :auditTypeId")
     java.util.Optional<java.time.Instant> oldestFor(@Param("auditTypeId") Long auditTypeId);

@@ -186,9 +186,19 @@ class CustomerPanelIntegrationTest {
         assertEquals("second version", edited.getNotes());
         assertEquals(0L, countedSlots(tenant), "editing a draft still uses nothing");
 
-        // A request that tries to move the draft to another account is refused outright.
-        assertThrows(IllegalArgumentException.class, () -> invoiceService.updateDraft(tenant.scope(), draft.getId(),
-                new CreateInvoiceCommand(999_999L, LocalDate.now(), LocalDate.now().plusDays(7), null, "INR",
+        // A payload naming somebody else's account cannot move the draft: ownership is taken from the
+        // stored invoice, never from what the browser sent, so the foreign id is simply ignored.
+        invoiceService.updateDraft(tenant.scope(), draft.getId(), new CreateInvoiceCommand(999_999L, LocalDate.now(),
+                LocalDate.now().plusDays(9), "unrelated", "INR", tenant.templateId(),
+                List.of(line("Work", "1", "1.00", "0.00")), InvoiceStatus.DRAFT));
+        Invoice kept = invoiceService.findById(tenant.scope(), draft.getId());
+        assertEquals(tenant.customerId(), kept.getCustomerId(), "the draft still belongs to the account that made it");
+        assertEquals(LocalDate.now().plusDays(9), kept.getDueDate(), "and the edit that was allowed is the one that landed");
+
+        // An account that does not own the draft cannot reach it at all, by id or by edit.
+        Tenant other = newTenant("draft-other", 5);
+        assertThrows(ResourceNotFoundException.class, () -> invoiceService.updateDraft(other.scope(), draft.getId(),
+                new CreateInvoiceCommand(other.customerId(), LocalDate.now(), LocalDate.now().plusDays(7), null, "INR",
                         tenant.templateId(), List.of(line("Work", "1", "1.00", "0.00")), InvoiceStatus.DRAFT)));
 
         // An issued invoice is frozen; the correction path is cancel and reissue.

@@ -65,7 +65,7 @@ public class CustomerSettingsService {
     public CustomerSettings find(long customerId) {
         // A detached defaults object is what an account without a row reads as, so this never writes
         // and never fails on an account that has meanwhile been soft-deleted.
-        return settings.findById(customerId).orElseGet(
+        return settings.findById(customerId).map(CustomerSettings::attached).orElseGet(
                 () -> CustomerSettings.defaults(customers.findById(customerId).orElse(null)));
     }
 
@@ -76,7 +76,10 @@ public class CustomerSettingsService {
         Customer customer = customers.findById(customerId)
                 .filter(account -> !account.isSystemAccount())
                 .orElseThrow(() -> new ResourceNotFoundException("Customer account not found."));
-        CustomerSettings entity = settings.findById(customerId).orElseGet(() -> new CustomerSettings(customer));
+        // Update in place when the account has saved before; insert the first row otherwise. The two
+        // cases are indistinguishable by id alone, because the id is the account id either way.
+        CustomerSettings entity = settings.findById(customerId).map(CustomerSettings::attached)
+                .orElseGet(() -> new CustomerSettings(customer));
         Map<String, Object> before = describe(entity);
 
         if (command == null) throw new IllegalArgumentException("Nothing to save.");

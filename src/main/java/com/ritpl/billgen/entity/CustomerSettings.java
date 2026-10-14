@@ -26,7 +26,15 @@ import jakarta.persistence.Table;
  */
 @Entity
 @Table(name = "customer_settings")
-public class CustomerSettings {
+public class CustomerSettings implements org.springframework.data.domain.Persistable<Long> {
+
+    /**
+     * The id is the account id, so a row that has never been written still arrives here with one
+     * already set. Without this flag Spring Data reads "id is not null" as "detached", merges it, and
+     * PostgreSQL answers an update against a row that does not exist - which is why a first save has
+     * to be told apart from an edit.
+     */
+    @jakarta.persistence.Transient private boolean attached;
 
     @Id private Long customerId;
     @OneToOne @MapsId @JoinColumn(name = "customer_id", nullable = false) private Customer customer;
@@ -69,6 +77,15 @@ public class CustomerSettings {
     public static CustomerSettings defaults(Customer customer) {
         return new CustomerSettings(customer);
     }
+
+    /** Marks a row that came out of the database, so saving it updates rather than inserts. */
+    public static CustomerSettings attached(CustomerSettings row) {
+        row.attached = true;
+        return row;
+    }
+
+    @Override public Long getId() { return customerId; }
+    @Override public boolean isNew() { return !attached; }
 
     @PrePersist void onCreate() { createdAt = Instant.now(); updatedAt = createdAt; }
     @PreUpdate void onUpdate() { updatedAt = Instant.now(); }
