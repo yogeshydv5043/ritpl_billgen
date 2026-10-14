@@ -192,7 +192,8 @@ class SubscriptionServiceTest {
         assertEquals(60L, quota.remainingInvoices(),
                 "an inactive plan must not silently cut off a customer mid-term");
 
-        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(customer()));
+        Customer owner = customer();          // build fixtures before stubbing, never inside another when(...)
+        when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(owner));
         when(plans.findById(2L)).thenReturn(Optional.of(retired));
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,

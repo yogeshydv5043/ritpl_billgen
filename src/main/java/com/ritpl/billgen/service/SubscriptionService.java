@@ -142,8 +142,10 @@ public class SubscriptionService {
         LocalDate today = today();
         LocalDate start = requestedStart == null ? today : requestedStart;
         // The default term follows the plan's own billing cycle: a yearly plan must not be sold a
-        // month by default. An explicitly requested period always wins.
-        java.time.Period window = plan.usageWindow() == null ? java.time.Period.ofMonths(1) : plan.usageWindow();
+        // month by default. An explicitly requested period always wins. A plan whose cycle is unset or
+        // nonsensical is treated as monthly rather than being handed a zero-length term.
+        java.time.Period window = plan.usageWindow();
+        if (window == null || window.isZero() || window.isNegative()) window = java.time.Period.ofMonths(1);
         LocalDate end = requestedEnd == null ? start.plus(window).minusDays(1) : requestedEnd;
         if (start.isAfter(today) || end.isBefore(today) || end.isBefore(start)) {
             throw new IllegalArgumentException("An active subscription must start on or before today and end on or after today.");
