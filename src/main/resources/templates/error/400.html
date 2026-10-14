@@ -1,0 +1,4 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Check that')}"></head>
+<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside><main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content"><section class="panel error-card"><span class="error-orb">!</span><span class="kicker">NOT ACCEPTED</span><h1>That request was refused.</h1><p th:text="${message}">Nothing was changed.</p><p class="page-lede">Nothing was written, so you can correct it and try again.</p><a class="button button-primary" th:href="@{/}">Back to your workspace <span>&#8594;</span></a></section></div></main></div></body></html>

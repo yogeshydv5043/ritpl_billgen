@@ -69,17 +69,22 @@ public class CustomTemplateService {
         Customer owner = customers.findById(ownerId).filter(c -> !c.isSystemAccount())
                 .orElseThrow(() -> new ResourceNotFoundException("Customer account not found."));
         if (id == null) {
-            long used = templates.countByCustomer_IdAndActiveTrue(ownerId);
+            long used = templates.countByCustomer_IdAndDeletedAtIsNull(ownerId);
             if (used >= activeSubscription.getEffectiveCustomTemplateLimit()) {
-                throw new IllegalArgumentException("Your plan's custom template limit has been reached.");
+                throw new IllegalArgumentException("Your plan's custom template limit has been reached. Hiding a "
+                        + "design does not free its slot; deleting one that no invoice has used does.");
             }
         }
         boolean duplicate = id == null
-                ? templates.existsByCustomer_IdAndNameIgnoreCase(ownerId, v.name())
-                : templates.existsByCustomer_IdAndNameIgnoreCaseAndIdNot(ownerId, v.name(), id);
+                ? templates.existsByCustomer_IdAndNameIgnoreCaseAndDeletedAtIsNull(ownerId, v.name())
+                : templates.existsByCustomer_IdAndNameIgnoreCaseAndIdNotAndDeletedAtIsNull(ownerId, v.name(), id);
         if (duplicate) throw new IllegalArgumentException("You already have a custom template with that name.");
         CustomInvoiceTemplate template = id == null
                 ? new CustomInvoiceTemplate(owner, v.name(), v.style(), v.color()) : findById(scope, id);
+        if (template.isDeleted()) {
+            throw new IllegalArgumentException("That design is kept only because invoices were issued with it. It "
+                    + "cannot be edited or brought back - create a new design instead.");
+        }
         Map<String, Object> before = id == null ? null : Map.of("name", template.getName(), "style", template.getStyleKey(), "active", template.isActive());
         template.setCustomer(owner); template.setName(v.name()); template.setStyle(v.style());
         template.setAccentColor(v.color()); template.setActive(command.active());
@@ -104,11 +109,21 @@ public class CustomTemplateService {
         CustomInvoiceTemplate template = findById(scope, id);
         scope.requireWriteAccess();
         long ownerId = scope.requireCustomerId();
-        if (templates.countInvoices(id) > 0) template.setActive(false);
-        else templates.delete(template);
+        boolean referenced = templates.countInvoices(id) > 0;
+        if (referenced) {
+            // Retire rather than hide. The row stays because issued documents refer to it, but it is out
+            // of the gallery, out of the selectable list, and no longer occupies a slot in the plan - a
+            // customer must not be locked out of customising by the size of its history.
+            template.setActive(false);
+            template.setDeletedAt(java.time.Instant.now());
+            templates.save(template);
+        } else {
+            templates.delete(template);
+        }
         audit.record(AuditEventCommand.success(ownerId, "DELETE", "CUSTOM_TEMPLATE", "Invoice template", id,
-                "Customer deleted or archived a custom invoice template.", Map.of("name", template.getName()),
-                Map.of("archived", templates.countInvoices(id) > 0)));
+                referenced ? "Customer retired a custom invoice template that invoices still use."
+                        : "Customer deleted a custom invoice template.",
+                Map.of("name", template.getName()), Map.of("archived", referenced)));
     }
 
     /**
@@ -122,8 +137,9 @@ public class CustomTemplateService {
         long ownerId = scope.requireCustomerId();
         CustomInvoiceTemplate source = findById(scope, id);
         var activeSubscription = subscriptions.requireActiveForUpdate(scope);
-        if (templates.countByCustomer_IdAndActiveTrue(ownerId) >= activeSubscription.getEffectiveCustomTemplateLimit()) {
-            throw new IllegalArgumentException("Your plan's custom template limit has been reached, so this copy cannot be made.");
+        if (templates.countByCustomer_IdAndDeletedAtIsNull(ownerId) >= activeSubscription.getEffectiveCustomTemplateLimit()) {
+            throw new IllegalArgumentException("Your plan's custom template limit has been reached, so this copy cannot be made."
+                    + " Hiding a design does not free its slot; deleting one that no invoice has used does.");
         }
         Customer owner = customers.findById(ownerId).filter(c -> !c.isSystemAccount())
                 .orElseThrow(() -> new ResourceNotFoundException("Customer account not found."));
@@ -168,6 +184,10 @@ public class CustomTemplateService {
     public CustomInvoiceTemplate setActive(TenantScope scope, long id, boolean active) {
         scope.requireWriteAccess();
         CustomInvoiceTemplate template = findById(scope, id);
+        if (active && template.isDeleted()) {
+            throw new IllegalArgumentException("That design is retired: invoices were issued with it, so it is kept "
+                    + "for their sake but cannot be used again. Create a new design instead.");
+        }
         boolean before = template.isActive();
         if (before == active) return template;
         template.setActive(active);
@@ -183,7 +203,7 @@ public class CustomTemplateService {
         String base = sourceName.length() > 90 ? sourceName.substring(0, 90) : sourceName;
         String candidate = base + " copy";
         int suffix = 2;
-        while (templates.existsByCustomer_IdAndNameIgnoreCase(ownerId, candidate) && suffix < 60) {
+        while (templates.existsByCustomer_IdAndNameIgnoreCaseAndDeletedAtIsNull(ownerId, candidate) && suffix < 60) {
             candidate = base + " copy " + suffix++;
         }
         return candidate;

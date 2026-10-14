@@ -76,7 +76,7 @@ public class CustomerDashboardService {
         LocalDate today = subscriptions.today();
 
         long templateCount = subscriptions.accessibleTemplates(scope).size();
-        long customizedCount = customTemplates.countByCustomer_IdAndActiveTrue(customerId);
+        long customizedCount = customTemplates.countByCustomer_IdAndDeletedAtIsNull(customerId);
         long productTotal = catalog.countAll(scope);
         long productActive = catalog.countActive(scope);
         long categoryTotal = categories.countAll(scope);

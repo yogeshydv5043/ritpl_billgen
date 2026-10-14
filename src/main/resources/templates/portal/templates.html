@@ -20,7 +20,8 @@
                     <h3 th:text="${template.name}">Classic</h3>
                     <p th:text="${template.description}">A clean layout for everyday bills.</p>
                     <ul class="template-facts"><li><span>Layout</span><strong th:text="${template.style.displayName}">Classic</strong></li><li><span>Status</span><strong th:classappend="${template.active ? ' is-good' : ''}" th:text="${template.active ? 'Available' : 'Retired'}">Available</strong></li><li><span>Customisation</span><strong>Copied to your own design</strong></li></ul>
-                    <div class="template-card-actions">
+                    <p class="field-help inline" th:if="${template.deleted}">Kept because invoices were issued with it. It cannot be edited or brought back, and it no longer uses one of your plan's design slots.</p>
+                    <div class="template-card-actions" th:unless="${template.deleted}">
                         <form th:action="@{/portal/templates/plan-template/{id}/default(id=${template.id})}" method="post"><button class="button button-small button-secondary" type="submit" th:disabled="${!template.active}" th:text="${settings.defaultTemplateId != null and settings.defaultTemplateId == template.id} ? 'Default template ✓' : 'Set as default'">Set as default</button></form>
                         <a class="button button-small button-quiet" th:href="@{/portal/templates/new(style=${template.styleCode})}">Customise a copy <span>→</span></a>
                     </div>
@@ -45,7 +46,7 @@
                     <ul class="template-facts">
                         <li><span>Layout</span><strong th:text="${template.style.displayName} + (${template.compact} ? ' · compact' : '')">Classic · compact</strong></li>
                         <li><span>Font</span><strong th:text="${#strings.toLowerCase(template.fontKey) == 'serif' ? 'Serif' : (#strings.toLowerCase(template.fontKey) == 'mono' ? 'Monospace' : 'Interface default')}">Interface default</strong></li>
-                        <li><span>Status</span><strong th:classappend="${template.active ? ' is-good' : ''}" th:text="${template.active ? 'Available' : 'Hidden'}">Available</strong></li>
+                        <li><span>Status</span><strong th:classappend="${template.active ? ' is-good' : ''}" th:text="${template.deleted ? 'Archived' : (template.active ? 'Available' : 'Hidden')}">Available</strong></li>
                         <li><span>Version</span><strong th:text="'v' + ${template.version}">v1</strong></li>
                     </ul>
                     <div class="template-card-actions">
@@ -54,7 +55,7 @@
                         <form th:action="@{/portal/templates/{id}/duplicate(id=${template.id})}" method="post"><button class="button button-small button-quiet" type="submit">Duplicate</button></form>
                         <form th:action="@{/portal/templates/{id}/toggle(id=${template.id})}" method="post"><button class="button button-small button-quiet" type="submit" th:text="${template.active} ? 'Hide' : 'Show'">Hide</button></form>
                         <form th:action="@{/portal/templates/{id}/reset(id=${template.id})}" method="post" onsubmit="return confirm('Reset this design to its plain layout? Your name and layout choice stay; the accent colour and text blocks are cleared. Invoices already issued are unaffected.')"><button class="button button-small button-quiet" type="submit">Reset</button></form>
-                        <form th:action="@{/portal/templates/{id}/delete(id=${template.id})}" method="post" onsubmit="return confirm('Delete this template? If invoices already use it, it is hidden instead so those documents keep their layout.')"><button class="button button-small button-quiet button-danger" type="submit">Delete</button></form>
+                        <form th:action="@{/portal/templates/{id}/delete(id=${template.id})}" method="post" onsubmit="return confirm('Delete this template? If invoices already use it, it is archived instead - those documents keep their layout, the design leaves your gallery, and its slot in your plan is freed.')"><button class="button button-small button-quiet button-danger" type="submit">Delete</button></form>
                     </div>
                 </div>
             </article>

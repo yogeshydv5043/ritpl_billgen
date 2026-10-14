@@ -77,8 +77,12 @@ public class PortalInvoiceController {
             Model model) {
         TenantScope scope = TenantScope.from(principal);
         long customerId = scope.requireCustomerId();
+        String rangeError = null;
         if (from != null && to != null && to.isBefore(from)) {
-            throw new IllegalArgumentException("The end date must not be before the start date.");
+            // The filters are the customer's own typing; the list still renders, with the reason beside
+            // the fields, instead of trading the page for an error screen.
+            rangeError = "The end date must not be before the start date, so the dates were not applied.";
+            from = null; to = null;
         }
         InvoiceFilter filter = new InvoiceFilter(q, statusOf(status), from, to,
                 "overdue".equals(status) ? Boolean.TRUE : null, null);
@@ -94,6 +98,7 @@ public class PortalInvoiceController {
         model.addAttribute("to", to);
         model.addAttribute("sort", SORTS.containsKey(sort) ? sort : "issued");
         model.addAttribute("dir", direction == Sort.Direction.ASC ? "asc" : "desc");
+        if (rangeError != null) model.addAttribute("errorMessage", rangeError);
         model.addAttribute("activeFilters", filter.hasAnyFilter());
         prepare(scope, customerId, model);
         return "portal/invoices";

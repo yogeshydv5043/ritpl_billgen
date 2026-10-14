@@ -116,7 +116,10 @@ public class SubscriptionService {
         long invoiceLimit = sub.getEffectiveInvoiceLimit();
         long productsUsed = products.countByCustomer_Id(customerId);
         long productLimit = sub.getEffectiveProductLimit();
-        long templatesUsed = customTemplates.countByCustomer_IdAndActiveTrue(customerId);
+        // Held designs, not merely selectable ones: hiding a design must not look like a free slot here
+        // while the server still refuses to create one. Retired designs (kept only for issued invoices)
+        // are not counted, which is the same rule CustomTemplateService enforces.
+        long templatesUsed = customTemplates.countByCustomer_IdAndDeletedAtIsNull(customerId);
         long templateLimit = sub.getEffectiveCustomTemplateLimit();
         return new UsageQuota(invoiceLimit, invoiceUsed, Math.max(0, invoiceLimit - invoiceUsed),
                 productLimit, productsUsed, Math.max(0, productLimit - productsUsed),
