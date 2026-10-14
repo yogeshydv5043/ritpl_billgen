@@ -102,8 +102,11 @@ public class JobProcessor {
         }
         try {
             transaction.execute(status -> {
-                JobBatch batch = batches.findById(batchId).orElse(null);
-                if (batch == null || batch.getStatus() != JobBatchStatus.RUNNING) return null;
+                JobBatch batch = batches.findByIdForUpdate(batchId).orElse(null);
+                // The rolled-back transaction also rolled back the claim, so the row we are here to
+                // account for reads as PENDING again. Anything else (COMPLETED, PAUSED, CANCELLED, or
+                // RUNNING because another instance took it) is not ours to charge, so it is left alone.
+                if (batch == null || batch.getStatus() != JobBatchStatus.PENDING) return null;
                 BackgroundJob job = batch.getJob();
                 int attempts = batch.getAttempts() + 1;
                 batch.setAttempts(attempts);

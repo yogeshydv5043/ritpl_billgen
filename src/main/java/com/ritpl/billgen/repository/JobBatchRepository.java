@@ -1,10 +1,13 @@
 package com.ritpl.billgen.repository;
 
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import com.ritpl.billgen.entity.JobBatch;
+import jakarta.persistence.LockModeType;
 
 public interface JobBatchRepository extends JpaRepository<JobBatch, Long> {
     List<JobBatch> findByJob_IdOrderByBatchNumberAsc(Long jobId);
@@ -24,6 +27,16 @@ public interface JobBatchRepository extends JpaRepository<JobBatch, Long> {
      * spans claiming and finishing the batch, which {@link com.ritpl.billgen.service.JobProcessor}
      * does through a {@code TransactionTemplate}; the lock is released when that transaction ends.</p>
      */
+    /**
+     * One batch, read under a row lock, for the failure path. The claim's own write is rolled back with
+     * the transaction that failed, so recovery has to look at the row again after the dust settles; the
+     * lock is what stops it touching a batch another instance is genuinely working on (JPQL may carry a
+     * lock mode, which is why this is not a native query like {@link #claimPending}).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select b from JobBatch b where b.id = :id")
+    Optional<JobBatch> findByIdForUpdate(@Param("id") long id);
+
     @Query(value = "select b.* from job_batches b join background_jobs j on j.id = b.job_id "
             + "where b.status = 'PENDING' and j.status = 'RUNNING' "
             + "and (b.finished_at is null or b.finished_at <= now() - make_interval(mins => j.retry_delay_minutes)) "
