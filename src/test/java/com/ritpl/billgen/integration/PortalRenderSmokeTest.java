@@ -217,8 +217,11 @@ class PortalRenderSmokeTest {
         assertTrue(html.contains("auth-shell") && html.contains("auth-card"),
                 "sign-up has to be dressed like sign-in, or the two halves look like different products");
 
-        String token = csrfTokenFrom(mockMvc.perform(get("/register")).andReturn().getResponse().getContentAsString());
-        MvcResult refused = mockMvc.perform(post("/register").param("_csrf", token)
+        // The token and the session it was issued to travel together, so both are taken from one page
+        // load; a token scraped from a second request belongs to a session this POST will not present.
+        String token = csrfTokenFrom(html);
+        MockHttpSession applicant = (MockHttpSession) form.getRequest().getSession(false);
+        MvcResult refused = mockMvc.perform(post("/register").session(applicant).param("_csrf", token)
                 .param("companyName", "Ravi Textiles").param("contactName", "")
                 .param("email", "not-an-email").param("password", "short")).andReturn();
         assertEquals(200, refused.getResponse().getStatus(),
@@ -227,7 +230,7 @@ class PortalRenderSmokeTest {
         assertTrue(redrawn.contains("Ravi Textiles"), "and hands back what the applicant already typed");
         assertTrue(redrawn.contains("field-error"), "and marks the fields that were refused");
 
-        MvcResult signedUp = mockMvc.perform(post("/register").param("_csrf", token)
+        MvcResult signedUp = mockMvc.perform(post("/register").session(applicant).param("_csrf", token)
                 .param("companyName", "Ravi Textiles").param("contactName", "Ravi Kumar")
                 .param("email", "accounts@ravitextiles.example").param("country", "India")
                 .param("password", "Render!2026x")).andReturn();
