@@ -2,6 +2,7 @@ package com.ritpl.billgen.service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
@@ -13,9 +14,22 @@ import com.ritpl.billgen.repository.CustomInvoiceTemplateRepository;
 import com.ritpl.billgen.repository.CustomerRepository;
 import com.ritpl.billgen.security.TenantScope;
 
+/**
+ * The invoice templates a customer owns. A custom template is always a copy of one of the layouts the
+ * platform offers, decorated with this account's own accent, font and text blocks: the system template
+ * a plan bundles is never written here, so customizing one design cannot change what another account
+ * - or an already issued invoice - looks like.
+ *
+ * <p>Availability is a plan entitlement, checked on the write path: creating a template, duplicating
+ * one and hiding one all consult the active subscription's custom-template limit, and every query is
+ * pinned to the owning account.</p>
+ */
 @Service
 public class CustomTemplateService {
     private static final Pattern COLOR = Pattern.compile("#[0-9A-Fa-f]{6}");
+    private static final Set<String> FONTS = Set.of("DEFAULT", "SERIF", "MONO");
+    private static final Set<String> DENSITIES = Set.of("COMFORTABLE", "COMPACT");
+
     private final CustomInvoiceTemplateRepository templates;
     private final CustomerRepository customers;
     private final SubscriptionService subscriptions;
@@ -69,10 +83,18 @@ public class CustomTemplateService {
         Map<String, Object> before = id == null ? null : Map.of("name", template.getName(), "style", template.getStyleKey(), "active", template.isActive());
         template.setCustomer(owner); template.setName(v.name()); template.setStyle(v.style());
         template.setAccentColor(v.color()); template.setActive(command.active());
+        template.setFontKey(v.font()); template.setLayoutDensity(v.density());
+        template.setShowLogo(command.showLogo()); template.setShowBankDetails(command.showBankDetails());
+        template.setBankDetails(command.showBankDetails() ? v.bankDetails() : null);
+        template.setPaymentTerms(v.paymentTerms()); template.setFooterText(v.footerText());
+        template.setSignatureLabel(v.signatureLabel()); template.setSignatureName(v.signatureName());
         CustomInvoiceTemplate saved = templates.save(template);
         audit.record(AuditEventCommand.success(ownerId, id == null ? "CREATE" : "UPDATE", "CUSTOM_TEMPLATE", "Invoice template", saved.getId(),
                 id == null ? "Customer created a custom invoice template." : "Customer updated a custom invoice template.", before,
-                Map.of("name", saved.getName(), "style", saved.getStyleKey(), "active", saved.isActive())));
+                Map.of("name", saved.getName(), "style", saved.getStyleKey(), "active", saved.isActive(),
+                        "font", saved.getFontKey(), "density", saved.getLayoutDensity(),
+                        "customized", saved.getFooterText() != null || saved.getPaymentTerms() != null
+                                || saved.getBankDetails() != null || saved.getSignatureName() != null)));
         return saved;
     }
 
@@ -89,6 +111,84 @@ public class CustomTemplateService {
                 Map.of("archived", templates.countInvoices(id) > 0)));
     }
 
+    /**
+     * A copy of one of the account's own templates, so a design can be branched instead of overwritten.
+     * The plan's limit applies here too, because a copy is one more row.
+     */
+    @Transactional
+    @CacheEvict(cacheNames = "dashboard", allEntries = true)
+    public CustomInvoiceTemplate duplicate(TenantScope scope, long id) {
+        scope.requireWriteAccess();
+        long ownerId = scope.requireCustomerId();
+        CustomInvoiceTemplate source = findById(scope, id);
+        var activeSubscription = subscriptions.requireActiveForUpdate(scope);
+        if (templates.countByCustomer_IdAndActiveTrue(ownerId) >= activeSubscription.getEffectiveCustomTemplateLimit()) {
+            throw new IllegalArgumentException("Your plan's custom template limit has been reached, so this copy cannot be made.");
+        }
+        Customer owner = customers.findById(ownerId).filter(c -> !c.isSystemAccount())
+                .orElseThrow(() -> new ResourceNotFoundException("Customer account not found."));
+        CustomInvoiceTemplate copy = new CustomInvoiceTemplate(owner, uniqueCopyName(ownerId, source.getName()),
+                source.getStyle(), source.getAccentColor());
+        copy.setFontKey(source.getFontKey()); copy.setLayoutDensity(source.getLayoutDensity());
+        copy.setShowLogo(source.isShowLogo()); copy.setShowBankDetails(source.isShowBankDetails());
+        copy.setBankDetails(source.getBankDetails()); copy.setPaymentTerms(source.getPaymentTerms());
+        copy.setFooterText(source.getFooterText()); copy.setSignatureLabel(source.getSignatureLabel());
+        copy.setSignatureName(source.getSignatureName());
+        CustomInvoiceTemplate saved = templates.save(copy);
+        audit.record(AuditEventCommand.success(ownerId, "CREATE", "CUSTOM_TEMPLATE", "Invoice template", saved.getId(),
+                "Customer duplicated one of its own invoice templates.", Map.of("sourceId", id, "sourceName", source.getName()),
+                Map.of("name", saved.getName(), "style", saved.getStyleKey())));
+        return saved;
+    }
+
+    /**
+     * Drops the presentation this account added - accent, font, footer, terms, bank details, signature -
+     * and keeps the name and the base layout. The system template was never modified, so there is
+     * nothing further to restore.
+     */
+    @Transactional
+    @CacheEvict(cacheNames = "dashboard", allEntries = true)
+    public CustomInvoiceTemplate resetPresentation(TenantScope scope, long id) {
+        scope.requireWriteAccess();
+        CustomInvoiceTemplate template = findById(scope, id);
+        Map<String, Object> before = Map.of("style", template.getStyleKey(), "accent", String.valueOf(template.getAccentColor()),
+                "font", template.getFontKey());
+        template.setAccentColor(null);
+        template.resetPresentation();
+        CustomInvoiceTemplate saved = templates.save(template);
+        audit.record(AuditEventCommand.success(scope.requireCustomerId(), "RESET", "CUSTOM_TEMPLATE", "Invoice template", id,
+                "Customer reset an invoice template to its plain layout.", before,
+                Map.of("style", saved.getStyleKey(), "accent", "none")));
+        return saved;
+    }
+
+    /** Availability of the account's own template; a hidden one cannot be picked for a new invoice. */
+    @Transactional
+    @CacheEvict(cacheNames = "dashboard", allEntries = true)
+    public CustomInvoiceTemplate setActive(TenantScope scope, long id, boolean active) {
+        scope.requireWriteAccess();
+        CustomInvoiceTemplate template = findById(scope, id);
+        boolean before = template.isActive();
+        if (before == active) return template;
+        template.setActive(active);
+        CustomInvoiceTemplate saved = templates.save(template);
+        audit.record(AuditEventCommand.success(scope.requireCustomerId(), "UPDATE_STATUS", "CUSTOM_TEMPLATE",
+                "Invoice template", id, active ? "Customer made an invoice template available again."
+                        : "Customer hid an invoice template from new invoices.",
+                Map.of("active", before), Map.of("active", active)));
+        return saved;
+    }
+
+    private String uniqueCopyName(long ownerId, String sourceName) {
+        String base = sourceName.length() > 90 ? sourceName.substring(0, 90) : sourceName;
+        String candidate = base + " copy";
+        int suffix = 2;
+        while (templates.existsByCustomer_IdAndNameIgnoreCase(ownerId, candidate) && suffix < 60) {
+            candidate = base + " copy " + suffix++;
+        }
+        return candidate;
+    }
+
     private Validated validate(CustomTemplateCommand command) {
         if (command == null || command.name() == null || command.name().isBlank() || command.name().trim().length() > 100)
             throw new IllegalArgumentException("Enter a custom template name of at most 100 characters.");
@@ -97,7 +197,32 @@ public class CustomTemplateService {
         catch (IllegalArgumentException e) { throw new IllegalArgumentException("Choose a supported invoice template style."); }
         String color = command.accentColor() == null || command.accentColor().isBlank() ? null : command.accentColor().trim();
         if (color != null && !COLOR.matcher(color).matches()) throw new IllegalArgumentException("Accent color must be a six-digit hex color such as #2563EB.");
-        return new Validated(command.name().trim(), style, color);
+        return new Validated(command.name().trim(), style, color,
+                choice(command.fontKey(), "DEFAULT", FONTS, "Choose a supported font for the template."),
+                choice(command.layoutDensity(), "COMFORTABLE", DENSITIES, "Choose a supported layout density."),
+                clip(command.bankDetails(), 600, "bank details"), clip(command.paymentTerms(), 240, "payment terms"),
+                clip(command.footerText(), 600, "footer text"), clip(command.signatureLabel(), 120, "signature label"),
+                clip(command.signatureName(), 120, "signature name"));
     }
-    private record Validated(String name, BillTemplateStyle style, String color) { }
+
+    /** An unset choice falls back to the platform default; anything unknown is refused rather than guessed. */
+    private static String choice(String value, String fallback, Set<String> allowed, String message) {
+        if (value == null || value.isBlank()) return fallback;
+        String upper = value.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!allowed.contains(upper)) throw new IllegalArgumentException(message);
+        return upper;
+    }
+
+    private static String clip(String value, int max, String label) {
+        if (value == null || value.isBlank()) return null;
+        String trimmed = value.trim();
+        if (trimmed.length() > max) {
+            throw new IllegalArgumentException("Keep the " + label + " to " + max + " characters or fewer.");
+        }
+        return trimmed;
+    }
+
+    /** The accepted form of one submission: identity, base style, then the presentation choices. */
+    private record Validated(String name, BillTemplateStyle style, String color, String font, String density,
+            String bankDetails, String paymentTerms, String footerText, String signatureLabel, String signatureName) { }
 }

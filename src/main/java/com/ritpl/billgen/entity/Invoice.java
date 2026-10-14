@@ -49,6 +49,17 @@ public class Invoice {
     @Column(name = "template_accent_snapshot", length = 7) private String templateAccentSnapshot;
     /** The template version this invoice was produced with; edits to the template never rewrite it. */
     @Column(name = "template_version_snapshot") private Integer templateVersionSnapshot;
+    // Copied from the customer's own template when the invoice is issued, so a later edit to that
+    // template cannot change a document that has already been delivered. A null means the invoice was
+    // issued on a standard template, which prints with its layout's own defaults.
+    @Column(name = "template_font_snapshot", length = 16) private String templateFontSnapshot;
+    @Column(name = "template_density_snapshot", length = 16) private String templateDensitySnapshot;
+    @Column(name = "template_terms_snapshot", length = 240) private String templateTermsSnapshot;
+    @Column(name = "template_footer_snapshot", length = 600) private String templateFooterSnapshot;
+    @Column(name = "template_bank_snapshot", length = 600) private String templateBankSnapshot;
+    @Column(name = "template_show_logo_snapshot") private Boolean templateShowLogoSnapshot;
+    @Column(name = "template_signature_label_snapshot", length = 120) private String templateSignatureLabelSnapshot;
+    @Column(name = "template_signature_name_snapshot", length = 120) private String templateSignatureNameSnapshot;
     @Column(length = 1200) private String notes;
     @Column(nullable = false, precision = 14, scale = 2) private BigDecimal subtotal = BigDecimal.ZERO;
     @Column(name = "tax_amount", nullable = false, precision = 14, scale = 2) private BigDecimal taxAmount = BigDecimal.ZERO;
@@ -87,6 +98,15 @@ public class Invoice {
         String style = templateStyleSnapshot != null ? templateStyleSnapshot : customTemplate != null ? customTemplate.getStyleKey() : template == null ? "CLASSIC" : template.getStyleCode();
         try { return BillTemplateStyle.valueOf(style).getCssClass(); } catch (RuntimeException ex) { return BillTemplateStyle.CLASSIC.getCssClass(); }
     }
+    /** Typeface and spacing classes the account chose, so the print view matches the PDF. */
+    public String getPresentationCssClass() {
+        java.util.List<String> classes = new java.util.ArrayList<>();
+        String font = getPresentationFont();
+        if (font != null && !"DEFAULT".equals(font)) classes.add("invoice-font-" + font.toLowerCase(java.util.Locale.ROOT));
+        if (isCompactPresentation()) classes.add("invoice-compact");
+        return String.join(" ", classes);
+    }
+
     public String getTemplateAccentColor() { return templateAccentSnapshot != null ? templateAccentSnapshot : customTemplate != null ? customTemplate.getAccentColor() : template == null ? null : template.getAccentColor(); }
     public String getCompanyLogoDataUrl() {
         return companyLogoSnapshot == null || companyLogoSnapshot.length == 0 || companyLogoContentTypeSnapshot == null
@@ -118,6 +138,34 @@ public class Invoice {
     public void setTemplateAccentSnapshot(String v) { templateAccentSnapshot = v; }
     public Integer getTemplateVersionSnapshot() { return templateVersionSnapshot; }
     public void setTemplateVersionSnapshot(Integer v) { templateVersionSnapshot = v; }
+
+    // --- presentation, always read through the snapshot taken when the invoice was issued. An invoice
+    // issued before these columns existed falls back to the live template, exactly as the accent does.
+    public String getPresentationFont() { return snapshotOr(templateFontSnapshot, customTemplate == null ? null : customTemplate.getFontKey()); }
+    public void setTemplateFontSnapshot(String v) { templateFontSnapshot = v; }
+    public String getPresentationDensity() { return snapshotOr(templateDensitySnapshot, customTemplate == null ? null : customTemplate.getLayoutDensity()); }
+    public void setTemplateDensitySnapshot(String v) { templateDensitySnapshot = v; }
+    public String getPaymentTerms() { return snapshotOr(templateTermsSnapshot, customTemplate == null ? null : customTemplate.getPaymentTerms()); }
+    public void setTemplateTermsSnapshot(String v) { templateTermsSnapshot = v; }
+    public String getFooterText() { return snapshotOr(templateFooterSnapshot, customTemplate == null ? null : customTemplate.getFooterText()); }
+    public void setTemplateFooterSnapshot(String v) { templateFooterSnapshot = v; }
+    public String getBankDetails() { return showsBankDetails() ? snapshotOr(templateBankSnapshot, customTemplate == null ? null : customTemplate.getBankDetails()) : null; }
+    public void setTemplateBankSnapshot(String v) { templateBankSnapshot = v; }
+    public String getSignatureLabel() { return snapshotOr(templateSignatureLabelSnapshot, customTemplate == null ? null : customTemplate.getSignatureLabel()); }
+    public void setTemplateSignatureLabelSnapshot(String v) { templateSignatureLabelSnapshot = v; }
+    public String getSignatureName() { return snapshotOr(templateSignatureNameSnapshot, customTemplate == null ? null : customTemplate.getSignatureName()); }
+    public void setTemplateSignatureNameSnapshot(String v) { templateSignatureNameSnapshot = v; }
+    public boolean printsLogo() { return templateShowLogoSnapshot == null
+            ? (customTemplate == null || customTemplate.isShowLogo()) : templateShowLogoSnapshot; }
+    public void setTemplateShowLogoSnapshot(Boolean v) { templateShowLogoSnapshot = v; }
+    public Boolean getTemplateShowLogoSnapshot() { return templateShowLogoSnapshot; }
+    public boolean showsBankDetails() { return templateBankSnapshot != null || (templateBankSnapshot == null && customTemplate != null && customTemplate.isShowBankDetails()); }
+    /** Compact layouts tighten the table and the running text in both the print view and the PDF. */
+    public boolean isCompactPresentation() { return "COMPACT".equals(getPresentationDensity()); }
+    /** True when the invoice carries a signature block worth printing. */
+    public boolean hasSignatureBlock() { return notBlank(getSignatureLabel()) || notBlank(getSignatureName()); }
+    private static String snapshotOr(String snapshot, String live) { return notBlank(snapshot) ? snapshot : live; }
+    private static boolean notBlank(String v) { return v != null && !v.isBlank(); }
     public String getNotes() { return notes; }
     public void setNotes(String v) { notes = v; }
     public BigDecimal getSubtotal() { return subtotal; }

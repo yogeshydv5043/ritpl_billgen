@@ -3,15 +3,56 @@
 <head th:replace="~{fragments/layout :: head(${formTitle})}"></head>
 <body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
 <main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content page-content-narrow">
-    <div class="breadcrumb"><a th:href="@{/portal/templates}">Custom templates</a><span>/</span><span th:text="${formTitle}">Template</span></div>
-    <section class="page-title-row compact-title"><div><span class="kicker">TENANT TEMPLATE</span><h1 th:text="${formTitle}">Create template</h1><p class="page-lede">Choose a supported layout and an optional accent color.</p></div></section>
-    <form class="panel form-panel" th:action="@{${formAction}}" th:object="${templateForm}" method="post" novalidate>
+    <div class="breadcrumb"><a th:href="@{/portal/templates}">Invoice templates</a><span>/</span><span th:text="${formTitle}">Template</span></div>
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <section class="page-title-row compact-title"><div><span class="kicker">A DESIGN YOUR ACCOUNT OWNS</span><h1 th:text="${formTitle}">Create template</h1><p class="page-lede">Pick a supported layout, then add the colours, fonts and printed blocks your company needs. This is your copy — the system template stays exactly as it is, and invoices already issued keep the layout they were sent with.</p></div></section>
+    <div class="panel notice notice-warning" th:if="${editingId == null and quota != null and quota.remainingCustomTemplates <= 0}" role="alert"><p><strong>No custom-template slots are free on your plan (<span th:text="${quota.customTemplatesUsed}">0</span> of <span th:text="${quota.customTemplateLimit}">0</span> used).</strong> Saving a new design will be refused. Hide or delete one you no longer use, or upgrade for more.</p></div>
+
+    <form class="panel form-panel template-design-form" th:action="@{${formAction}}" th:object="${templateForm}" method="post" novalidate>
         <div class="global-errors" th:if="${#fields.hasGlobalErrors()}"><p th:each="err : ${#fields.globalErrors()}" th:text="${err}">Please check the template.</p></div>
-        <div class="form-grid"><div class="field field-full"><label for="name">Template name</label><input id="name" th:field="*{name}" maxlength="100" required><small class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></small></div>
+        <div class="form-intro"><span class="form-step">01</span><div><h2>Name and layout</h2><p>The name keeps your designs apart; the layout decides the structure you are customising.</p></div></div>
+        <div class="form-grid"><div class="field field-full"><label for="name">Template name <span class="required">*</span></label><input id="name" th:field="*{name}" maxlength="100" placeholder="e.g. Studio retainer" required><small class="field-help">Unique within your account.</small><small class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></small></div>
             <div class="field"><label for="styleKey">Layout</label><select id="styleKey" th:field="*{styleKey}"><option th:each="style : ${styles}" th:value="${style.name()}" th:text="${style.displayName}">Classic</option></select><small class="field-error" th:if="${#fields.hasErrors('styleKey')}" th:errors="*{styleKey}"></small></div>
-            <div class="field"><label for="accentColor">Accent color</label><input id="accentColor" th:field="*{accentColor}" placeholder="#2563EB" pattern="^#[0-9a-fA-F]{6}$"><small class="field-help">Optional six-digit hex color.</small><small class="field-error" th:if="${#fields.hasErrors('accentColor')}" th:errors="*{accentColor}"></small></div>
-            <div class="field"><label class="check-field"><input type="checkbox" th:field="*{active}"><span class="custom-check"></span><span><strong>Available for new invoices</strong><small>Used invoices keep their historical template snapshot.</small></span></label></div>
+            <div class="field"><label for="accentColor">Accent color</label><div class="accent-picker-row"><input id="accentColor" th:field="*{accentColor}" placeholder="#2563EB" pattern="^#[0-9a-fA-F]{6}$"><input type="color" aria-label="Pick an accent color" value="#2563eb" oninput="document.getElementById('accentColor').value = this.value.toUpperCase();"><span class="field-help inline">Optional six-digit hex color.</span></div><small class="field-error" th:if="${#fields.hasErrors('accentColor')}" th:errors="*{accentColor}"></small></div>
+            <div class="field"><label for="fontKey">Font</label><select id="fontKey" th:field="*{fontKey}"><option value="DEFAULT">Interface default</option><option value="SERIF">Serif (document style)</option><option value="MONO">Monospace (tabular)</option></select><small class="field-help">Applied to the print view and the PDF.</small><small class="field-error" th:if="${#fields.hasErrors('fontKey')}" th:errors="*{fontKey}"></small></div>
+            <div class="field"><label for="layoutDensity">Spacing</label><select id="layoutDensity" th:field="*{layoutDensity}"><option value="COMFORTABLE">Comfortable</option><option value="COMPACT">Compact (fits more lines)</option></select><small class="field-error" th:if="${#fields.hasErrors('layoutDensity')}" th:errors="*{layoutDensity}"></small></div>
+            <label class="check-field"><input type="checkbox" th:field="*{showLogo}"><span class="custom-check"></span><span><strong>Print my logo</strong><small class="field-help">Uses the logo on your <a th:href="@{/portal/company}">company profile</a>; nothing is uploaded here.</small></span></label>
+            <label class="check-field"><input type="checkbox" th:field="*{active}"><span class="custom-check"></span><span><strong>Available for new invoices</strong><small class="field-help">Used invoices keep their historical template snapshot.</small></span></label>
         </div>
-        <div class="form-actions"><a class="button button-quiet" th:href="@{/portal/templates}">Cancel</a><button class="button button-primary" type="submit">Save template <span>→</span></button></div>
+
+        <div class="form-divider"></div>
+        <div class="form-intro"><span class="form-step">02</span><div><h2>Printed blocks</h2><p>Text your invoices should carry. Each block is optional, and whatever you save here is copied onto an invoice when it is issued.</p></div></div>
+        <div class="form-grid"><div class="field field-full"><label for="paymentTerms">Payment terms</label><textarea id="paymentTerms" rows="2" maxlength="240" th:field="*{paymentTerms}" placeholder="Payment is due within 14 days by bank transfer."></textarea><small class="field-error" th:if="${#fields.hasErrors('paymentTerms')}" th:errors="*{paymentTerms}"></small></div>
+            <div class="field field-full"><label for="footerText">Footer text</label><textarea id="footerText" rows="2" maxlength="600" th:field="*{footerText}" placeholder="Registered office, company number…"></textarea><small class="field-error" th:if="${#fields.hasErrors('footerText')}" th:errors="*{footerText}"></small></div>
+            <label class="check-field field-full"><input type="checkbox" th:field="*{showBankDetails}"><span class="custom-check"></span><span><strong>Print bank details on invoices</strong><small class="field-help">The text below only appears on the document when this is ticked.</small></span></label>
+            <div class="field field-full"><label for="bankDetails">Bank details</label><textarea id="bankDetails" rows="3" maxlength="600" th:field="*{bankDetails}" placeholder="Bank · Account name · Number · IFSC/SWIFT"></textarea><small class="field-error" th:if="${#fields.hasErrors('bankDetails')}" th:errors="*{bankDetails}"></small></div>
+            <div class="field"><label for="signatureLabel">Signature caption</label><input id="signatureLabel" maxlength="120" th:field="*{signatureLabel}" placeholder="Authorised signatory"><small class="field-error" th:if="${#fields.hasErrors('signatureLabel')}" th:errors="*{signatureLabel}"></small></div>
+            <div class="field"><label for="signatureName">Signature name</label><input id="signatureName" maxlength="120" th:field="*{signatureName}" placeholder="For example, the name printed above the line"><small class="field-error" th:if="${#fields.hasErrors('signatureName')}" th:errors="*{signatureName}"></small></div>
+        </div>
+
+        <div class="form-actions"><a class="button button-quiet" th:href="@{/portal/templates}">Cancel</a><button class="button button-secondary" type="submit" name="action" value="preview">Preview this design</button><button class="button button-primary" type="submit">Save template <span>→</span></button></div>
     </form>
+
+    <section class="panel preview-panel design-preview" th:if="${preview != null}" aria-label="Design preview">
+        <div class="panel-heading"><div><span class="kicker">PREVIEW · NOT SAVED YET</span><h2>How a new invoice would look</h2></div><a class="text-link" th:href="@{/portal/invoices/new}">Try it on an invoice <span>→</span></a></div>
+        <div class="template-preview"
+     th:with="styleClass=${T(java.util.Objects).equals('MODERN', preview.styleKey) ? ' template-modern' : (T(java.util.Objects).equals('MINIMAL', preview.styleKey) ? ' template-minimal' : ' template-classic')},
+              fontClass=${T(java.util.Objects).equals('DEFAULT', preview.fontKey) ? '' : ' invoice-font-' + #strings.toLowerCase(preview.fontKey)},
+              denseClass=${T(java.util.Objects).equals('COMPACT', preview.layoutDensity) ? ' invoice-compact' : ''}"
+     th:classappend="${styleClass + fontClass + denseClass}"
+     th:style="${preview.accentColor != null and !preview.accentColor.isBlank() ? '--template-accent:' + preview.accentColor : ''}">
+            <span class="template-preview-bar" th:style="'background:' + ${preview.accentColor != null and !preview.accentColor.isBlank() ? preview.accentColor : '#376fbd'}"></span>
+            <h3 th:text="${customer != null ? customer.companyName : preview.name}">Company name</h3>
+            <p class="preview-invoice-number">INVOICE · DRAFT NUMBER</p>
+            <span class="template-preview-lines" aria-hidden="true"><i></i><i></i><i></i></span>
+            <div class="print-blocks">
+                <div class="print-block" th:if="${preview.paymentTerms != null and !preview.paymentTerms.isBlank()}"><span class="kicker">PAYMENT TERMS</span><p th:text="${preview.paymentTerms}">Terms</p></div>
+                <div class="print-block" th:if="${preview.showBankDetails and preview.bankDetails != null and !preview.bankDetails.isBlank()}"><span class="kicker">BANK DETAILS</span><p th:text="${preview.bankDetails}">Bank</p></div>
+                <div class="print-block" th:if="${preview.footerText != null and !preview.footerText.isBlank()}"><span class="kicker">FOOTER</span><p th:text="${preview.footerText}">Footer</p></div>
+                <div class="print-signature" th:if="${(preview.signatureLabel != null and !preview.signatureLabel.isBlank()) or (preview.signatureName != null and !preview.signatureName.isBlank())}"><span class="signature-rule" aria-hidden="true"></span><strong th:text="${preview.signatureName != null and !preview.signatureName.isBlank() ? preview.signatureName : 'Authorised signatory'}">Name</strong><small th:text="${preview.signatureLabel != null and !preview.signatureLabel.isBlank() ? preview.signatureLabel : 'Authorised signatory'}">Caption</small></div>
+            </div>
+        </div>
+        <p class="preview-note">This preview is drawn from what you have typed; nothing has been saved, and no invoice slot was used. The logo<span th:if="${!preview.showLogo}"> is switched off in this design</span><span th:if="${preview.showLogo}"> prints from your company profile</span>.</p>
+    </section>
+    <footer class="page-footer"><span>Saving writes only to your account's own template row.</span><a th:href="@{/portal/settings}">Choose the default in settings ↗</a></footer>
 </div></main></div></body></html>

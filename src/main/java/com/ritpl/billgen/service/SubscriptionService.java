@@ -152,6 +152,23 @@ public class SubscriptionService {
         }
         CustomerSubscription current = subscriptions.findForUpdate(customerId, SubscriptionStatus.ACTIVE).orElse(null);
         Long previousPlanId = current == null ? null : current.getPlan().getId();
+        // The renewal rules live here, so no page can talk its way past them. Changing plan inside an
+        // unexpired term needs the current plan to permit a mid-term change, and a move to a cheaper
+        // plan additionally needs the target plan to accept downgrades. Renewing the same plan is always
+        // allowed, and nothing renews by itself: this workspace has no payment provider, so an
+        // expiring term stays expired until the account or an administrator buys the next one.
+        if (current != null && !plan.getId().equals(previousPlanId) && current.isEffective(today)) {
+            if (!current.getPlan().isAllowMidtermUpgrade()) {
+                throw new IllegalArgumentException("Your " + current.getPlan().getName()
+                        + " plan does not allow changing plans mid-term. Its access runs to " + current.getEndsOn()
+                        + ", and the change can be made from that date.");
+            }
+            if (isDowngrade(current.getPlan(), plan) && !plan.isAllowDowngrade()) {
+                throw new IllegalArgumentException("That plan does not accept a mid-term downgrade. Keep "
+                        + current.getPlan().getName() + " until " + current.getEndsOn()
+                        + " or choose a plan that allows it.");
+            }
+        }
         int carry = 0;
         if (current != null) {
             // A plan change within an unexpired term is not a quota reset: issued usage follows the customer to the new plan.
@@ -172,6 +189,14 @@ public class SubscriptionService {
                 Map.of("planId", plan.getId(), "status", saved.getStatus().name(), "startedOn", start, "endsOn", end,
                         "invoiceUsageCarryForward", carry)).withActor(actor));
         return saved;
+    }
+
+    /** A downgrade is a move to a plan that costs less, or - at the same price - allows fewer invoices. */
+    private static boolean isDowngrade(SubscriptionPlan from, SubscriptionPlan to) {
+        java.math.BigDecimal fromPrice = from.getMonthlyPrice() == null ? java.math.BigDecimal.ZERO : from.getMonthlyPrice();
+        java.math.BigDecimal toPrice = to.getMonthlyPrice() == null ? java.math.BigDecimal.ZERO : to.getMonthlyPrice();
+        if (toPrice.compareTo(fromPrice) != 0) return toPrice.compareTo(fromPrice) < 0;
+        return to.getMaxMonthlyInvoices() < from.getMaxMonthlyInvoices();
     }
 
     @Transactional

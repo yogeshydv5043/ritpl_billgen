@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Account settings')}"></head>
+<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content page-content-narrow">
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <section class="page-title-row compact-title"><div><span class="kicker">HOW YOUR WORKSPACE BEHAVES</span><h1>Account settings</h1><p class="page-lede">Defaults for new invoices, catalogue conventions, how far back you can browse your audit trail, and which alerts you want. Nothing here changes a document that has already been issued.</p></div></section>
+    <div class="panel notice notice-warning" th:if="${subscription == null}"><p>You have no active plan, so template defaults will apply as soon as one is chosen. <a th:href="@{/portal/plan}">View plans</a>.</p></div>
+
+    <form class="settings-form" th:action="@{/portal/settings}" th:object="${settingsForm}" method="post" novalidate>
+        <div class="global-errors" th:if="${#fields.hasErrors('global')}"><p th:each="err : ${#fields.globalErrors()}" th:text="${err}">Please check the settings.</p></div>
+
+        <section class="panel form-panel">
+            <div class="form-intro"><span class="form-step">01</span><div><h2>Invoice defaults</h2><p>These prefill the create-invoice form; the server re-checks every one of them on save.</p></div></div>
+            <div class="form-grid form-grid-two">
+                <div class="field"><label for="defaultTemplateId">Default plan template</label><select id="defaultTemplateId" th:field="*{defaultTemplateId}"><option value="">No default — ask me each time</option><option th:each="template : ${planTemplates}" th:value="${template.id}" th:text="${template.name}">Classic</option></select><small class="field-help" th:if="${#lists.isEmpty(planTemplates)}">No template is available until a plan is active.</small><small class="field-error" th:if="${#fields.hasErrors('defaultTemplateId')}" th:errors="*{defaultTemplateId}"></small></div>
+                <div class="field"><label for="defaultCustomTemplateId">Default custom template</label><select id="defaultCustomTemplateId" th:field="*{defaultCustomTemplateId}"><option value="">Use a plan template</option><option th:each="template : ${customTemplates}" th:value="${template.id}" th:text="${template.name}">My design</option></select><small class="field-help">A custom design is chosen over a plan template when both are set.</small><small class="field-error" th:if="${#fields.hasErrors('defaultCustomTemplateId')}" th:errors="*{defaultCustomTemplateId}"></small></div>
+                <div class="field"><label for="invoiceNumberPrefix">Invoice numbering prefix</label><div class="prefix-preview"><input id="invoiceNumberPrefix" th:field="*{invoiceNumberPrefix}" maxlength="8" placeholder="INV-"><span class="currency-prefix" aria-hidden="true">INV-000123</span></div><small class="field-help">Up to 8 characters, letters, digits or a dash. The sequence itself is shared and gapless, so numbers stay unique.</small><small class="field-error" th:if="${#fields.hasErrors('invoiceNumberPrefix')}" th:errors="*{invoiceNumberPrefix}"></small></div>
+                <div class="field"><label for="defaultCurrency">Currency</label><input id="defaultCurrency" th:field="*{defaultCurrency}" maxlength="3" list="currency-codes" placeholder="INR"><datalist id="currency-codes"><option value="INR">INR · Indian Rupee</option><option value="USD">USD · US Dollar</option><option value="EUR">EUR · Euro</option><option value="GBP">GBP · Pound Sterling</option><option value="AED">AED · UAE Dirham</option><option value="AUD">AUD · Australian Dollar</option><option value="SGD">SGD · Singapore Dollar</option></datalist><small class="field-help">Three letters. Each invoice can still override it.</small><small class="field-error" th:if="${#fields.hasErrors('defaultCurrency')}" th:errors="*{defaultCurrency}"></small></div>
+                <div class="field"><label for="defaultDueDays">Payment due in (days)</label><input id="defaultDueDays" type="number" min="0" max="365" step="1" th:field="*{defaultDueDays}"><small class="field-help">Sets the due date on a new invoice. 0 means due on issue.</small><small class="field-error" th:if="${#fields.hasErrors('defaultDueDays')}" th:errors="*{defaultDueDays}"></small></div>
+                <div class="field"><label for="defaultTaxRate">Default tax rate (%)</label><input id="defaultTaxRate" type="number" min="0" max="100" step="0.01" th:field="*{defaultTaxRate}" placeholder="Leave empty for no default"><small class="field-help">Suggested on new lines only; a line's own rate always wins.</small><small class="field-error" th:if="${#fields.hasErrors('defaultTaxRate')}" th:errors="*{defaultTaxRate}"></small></div>
+                <div class="field field-full"><label for="defaultPaymentTerms">Payment terms</label><textarea id="defaultPaymentTerms" rows="2" maxlength="240" th:field="*{defaultPaymentTerms}" placeholder="Payment is due within 14 days by bank transfer."></textarea><small class="field-help">Printed under the totals when your template has no terms of its own.</small><small class="field-error" th:if="${#fields.hasErrors('defaultPaymentTerms')}" th:errors="*{defaultPaymentTerms}"></small></div>
+                <div class="field field-full"><label for="defaultNotes">Default note on the invoice</label><textarea id="defaultNotes" rows="2" maxlength="600" th:field="*{defaultNotes}" placeholder="Thank you for your business."></textarea><small class="field-error" th:if="${#fields.hasErrors('defaultNotes')}" th:errors="*{defaultNotes}"></small></div>
+                <div class="field field-full"><label for="defaultFooter">Invoice footer</label><textarea id="defaultFooter" rows="2" maxlength="600" th:field="*{defaultFooter}" placeholder="Registered office address, company number, or anything that must appear at the foot of every bill."></textarea><small class="field-error" th:if="${#fields.hasErrors('defaultFooter')}" th:errors="*{defaultFooter}"></small></div>
+            </div>
+        </section>
+
+        <section class="panel form-panel">
+            <div class="form-intro"><span class="form-step">02</span><div><h2>Product and category defaults</h2><p>Used when you add a catalogue item, so a new entry matches the rest.</p></div></div>
+            <div class="form-grid form-grid-two">
+                <div class="field"><label for="defaultUnit">Default unit</label><input id="defaultUnit" th:field="*{defaultUnit}" maxlength="24" placeholder="hour, piece, month"><small class="field-help">Free text, up to 24 characters. Editable per product.</small><small class="field-error" th:if="${#fields.hasErrors('defaultUnit')}" th:errors="*{defaultUnit}"></small></div>
+                <div class="field"><label for="defaultCategoryId">Default category</label><select id="defaultCategoryId" th:field="*{defaultCategoryId}"><option value="">No default category</option><option th:each="category : ${categories}" th:value="${category.id}" th:text="${category.name}">Services</option></select><small class="field-help">Only categories that exist in your catalogue are offered.</small><small class="field-error" th:if="${#fields.hasErrors('defaultCategoryId')}" th:errors="*{defaultCategoryId}"></small></div>
+            </div>
+        </section>
+
+        <section class="panel form-panel">
+            <div class="form-intro"><span class="form-step">03</span><div><h2>History, lists and exports</h2><p>How much of your own audit trail you can browse, and how wide a default export reaches.</p></div></div>
+            <div class="form-grid form-grid-two">
+                <div class="field"><label for="auditHistoryPeriod">Audit history period</label><select id="auditHistoryPeriod" th:field="*{auditHistoryPeriod}"><option th:each="period : ${auditPeriods}" th:value="${period}" th:text="${period.displayName}">Last 1 year</option></select><small class="field-help">This is a <strong>viewing</strong> window, not a deletion rule: shortening it hides older entries from your lists and exports, and lengthening it shows them again only while the platform's authorised retention still holds them. Records are never deleted from here.</small><small class="field-error" th:if="${#fields.hasErrors('auditHistoryPeriod')}" th:errors="*{auditHistoryPeriod}"></small></div>
+                <div class="field"><label for="listPageSize">Rows per page</label><select id="listPageSize" th:field="*{listPageSize}"><option th:each="size : ${pageSizes}" th:value="${size}" th:text="${size} + ' per page'">20 per page</option></select><small class="field-help">Applies to invoices, products, categories and the audit trail.</small><small class="field-error" th:if="${#fields.hasErrors('listPageSize')}" th:errors="*{listPageSize}"></small></div>
+                <div class="field"><label for="exportRangeDays">Default export range (days)</label><input id="exportRangeDays" type="number" min="7" max="730" step="1" th:field="*{exportRangeDays}"><small class="field-help">How far a default export reaches when you do not pick dates. Excel (.xlsx) is the only format the workspace writes.</small><small class="field-error" th:if="${#fields.hasErrors('exportRangeDays')}" th:errors="*{exportRangeDays}"></small></div>
+                <div class="field"><label for="exportFormats">Export format</label><input id="exportFormats" type="text" value="Excel (.xlsx)" disabled><small class="field-help">Fixed by the platform so a file always opens in the same shape.</small></div>
+            </div>
+        </section>
+
+        <section class="panel form-panel">
+            <div class="form-intro"><span class="form-step">04</span><div><h2>Notifications</h2><p>Which platform notices you want. Delivery goes through the workspace's notification system, so an alert can be simulated or fail without losing the underlying record.</p></div></div>
+            <div class="form-grid form-grid-two">
+                <label class="check-field"><input type="checkbox" th:field="*{notifyExpiryReminders}"><span><strong>Subscription expiry reminders</strong><small class="field-help">Notice before your term ends, so invoicing does not stop by surprise.</small></span></label>
+                <label class="check-field"><input type="checkbox" th:field="*{notifyQuotaAlerts}"><span><strong>Quota alerts</strong><small class="field-help">When this period's invoice allowance is close to or fully used.</small></span></label>
+                <label class="check-field"><input type="checkbox" th:field="*{notifyPaymentUpdates}"><span><strong>Payment updates</strong><small class="field-help">Status changes on your invoices, such as a payment being recorded.</small></span></label>
+                <label class="check-field"><input type="checkbox" th:field="*{notifySecurityAlerts}"><span><strong>Security notices</strong><small class="field-help">Password changes and other account-security events.</small></span></label>
+            </div>
+            <p class="form-footnote"><span>✳</span> Turning an alert off only stops that message; the expiry job and the audit entry for it still run, because they are the evidence the term changed.</p>
+        </section>
+
+        <div class="sticky-form-actions"><a class="button button-quiet" th:href="@{/portal/settings}">Discard changes</a><button class="button button-primary button-tall" type="submit">Save settings <span>→</span></button></div>
+    </form>
+    <footer class="page-footer"><span>Settings apply to <span th:text="${customer.companyName}">your company</span> only.</span><a th:href="@{/portal/audit}">See what was recorded ↗</a></footer>
+</div></main></div></body></html>

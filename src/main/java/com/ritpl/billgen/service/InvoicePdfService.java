@@ -32,39 +32,51 @@ import com.ritpl.billgen.entity.InvoiceItem;
  *
  * <p>Every value printed here comes from the invoice's own snapshot columns and line items, so a
  * download keeps showing the company details, prices, taxes, totals and template accent that were in
- * force when the invoice was issued - even after the profile, catalogue or template is edited.</p>
+ * force when the invoice was issued - even after the profile, catalogue or template is edited. The
+ * typeface, spacing, payment terms, remittance block, footer line and signature line an account had
+ * chosen for its template are snapshot the same way, which is what lets the PDF match the print view
+ * of the very same document without reading anything that may have changed since.</p>
  */
 @Service
 public class InvoicePdfService {
 
     private static final DecimalFormat MONEY = new DecimalFormat("#,##0.00", DecimalFormatSymbols.getInstance(Locale.ROOT));
-    private static final Font HEADING = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11);
-    private static final Font LABEL = FontFactory.getFont(FontFactory.HELVETICA, 8, Color.GRAY);
-    private static final Font BODY = FontFactory.getFont(FontFactory.HELVETICA, 10);
-    private static final Font BODY_BOLD = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10);
-    private static final Font SMALL = FontFactory.getFont(FontFactory.HELVETICA, 9);
     private static final Color RULE = new Color(228, 232, 238);
     private static final Color HIGHLIGHT = new Color(245, 247, 250);
 
     public byte[] render(Invoice invoice) {
         Color accent = accentColor(invoice.getTemplateAccentColor());
+        Fonts fonts = Fonts.of(invoice);
         Document document = new Document(PageSize.A4, 42, 42, 46, 42);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
             PdfWriter.getInstance(document, out);
             document.open();
-            document.add(header(invoice, accent));
-            document.add(divider(accent));
-            document.add(spacer(12));
-            document.add(items(invoice));
-            document.add(spacer(12));
-            document.add(totals(invoice, accent));
+            document.add(header(invoice, accent, fonts));
+            document.add(divider(accent, fonts));
+            document.add(spacer(fonts.gap()));
+            document.add(items(invoice, fonts));
+            document.add(spacer(fonts.gap()));
+            document.add(totals(invoice, fonts));
             if (invoice.getNotes() != null && !invoice.getNotes().isBlank()) {
-                document.add(spacer(14));
-                document.add(note(invoice.getNotes()));
+                document.add(spacer(fonts.gap() + 2));
+                document.add(note("A NOTE", invoice.getNotes(), fonts));
             }
-            document.add(spacer(18));
-            document.add(footer(invoice));
+            if (notBlank(invoice.getPaymentTerms())) {
+                document.add(spacer(fonts.gap()));
+                document.add(note("PAYMENT TERMS", invoice.getPaymentTerms(), fonts));
+            }
+            if (notBlank(invoice.getBankDetails())) {
+                document.add(spacer(fonts.gap()));
+                document.add(note("REMITTANCE DETAILS", invoice.getBankDetails(), fonts));
+            }
+            if (invoice.hasSignatureBlock()) {
+                document.add(spacer(fonts.gap() + 10));
+                document.add(paragraph("____________________________", fonts.small()));
+                document.add(paragraph(signatureCaption(invoice), fonts.small()));
+            }
+            document.add(spacer(fonts.gap() + 6));
+            document.add(footer(invoice, fonts));
             document.close();
             return out.toByteArray();
         } catch (DocumentException e) {
@@ -73,109 +85,111 @@ public class InvoicePdfService {
         }
     }
 
-    private PdfPTable header(Invoice invoice, Color accent) {
+    private PdfPTable header(Invoice invoice, Color accent, Fonts fonts) {
         PdfPTable table = new PdfPTable(new float[] { 1.15f, 1f });
         table.setWidthPercentage(100);
 
         PdfPCell issuer = openCell(Element.ALIGN_LEFT);
-        issuer.addElement(paragraph("ISSUED BY", LABEL));
-        issuer.addElement(paragraph(text(invoice.getCompanyNameSnapshot(), "Invoice"), HEADING));
-        issuer.addElement(paragraph(issuerDetails(invoice), SMALL));
+        issuer.addElement(paragraph("ISSUED BY", fonts.label()));
+        issuer.addElement(paragraph(text(invoice.getCompanyNameSnapshot(), "Invoice"), fonts.heading()));
+        issuer.addElement(paragraph(issuerDetails(invoice), fonts.small()));
         if (invoice.getCompanyGstinSnapshot() != null) {
-            issuer.addElement(paragraph("GSTIN " + invoice.getCompanyGstinSnapshot(), SMALL));
+            issuer.addElement(paragraph("GSTIN " + invoice.getCompanyGstinSnapshot(), fonts.small()));
         }
-        Image logo = logo(invoice);
+        // Whether the mark appears at all is the account's own layout choice, taken at issue time.
+        Image logo = invoice.printsLogo() ? logo(invoice) : null;
         if (logo != null) issuer.addElement(logo);
 
         PdfPCell title = openCell(Element.ALIGN_RIGHT);
-        title.addElement(paragraph("TAX INVOICE", LABEL));
-        title.addElement(invoiceNumber(text(invoice.getInvoiceNumber(), "-"), accent));
+        title.addElement(paragraph("TAX INVOICE", fonts.label()));
+        title.addElement(invoiceNumber(text(invoice.getInvoiceNumber(), "-"), accent, fonts));
         title.addElement(paragraph(invoice.getStatus().name() + "   ·   Template: "
-                + text(invoice.getTemplateName(), "default"), SMALL));
-        title.addElement(paragraph("Issued " + invoice.getIssueDate() + "   ·   Due " + invoice.getDueDate(), SMALL));
+                + text(invoice.getTemplateName(), "default"), fonts.small()));
+        title.addElement(paragraph("Issued " + invoice.getIssueDate() + "   ·   Due " + invoice.getDueDate(), fonts.small()));
 
         table.addCell(issuer);
         table.addCell(title);
         return table;
     }
 
-    private PdfPTable items(Invoice invoice) {
+    private PdfPTable items(Invoice invoice, Fonts fonts) {
         PdfPTable table = new PdfPTable(new float[] { 4.2f, 1f, 1.4f, 1.1f, 1.5f });
         table.setWidthPercentage(100);
-        addHeading(table, "DESCRIPTION", Element.ALIGN_LEFT);
-        addHeading(table, "QTY", Element.ALIGN_RIGHT);
-        addHeading(table, "UNIT PRICE", Element.ALIGN_RIGHT);
-        addHeading(table, "TAX", Element.ALIGN_RIGHT);
-        addHeading(table, "LINE TOTAL", Element.ALIGN_RIGHT);
+        addHeading(table, "DESCRIPTION", Element.ALIGN_LEFT, fonts);
+        addHeading(table, "QTY", Element.ALIGN_RIGHT, fonts);
+        addHeading(table, "UNIT PRICE", Element.ALIGN_RIGHT, fonts);
+        addHeading(table, "TAX", Element.ALIGN_RIGHT, fonts);
+        addHeading(table, "LINE TOTAL", Element.ALIGN_RIGHT, fonts);
 
         List<InvoiceItem> lines = invoice.getItems();
         if (lines.isEmpty()) {
-            PdfPCell empty = new PdfPCell(new Phrase("No line items recorded.", SMALL));
+            PdfPCell empty = new PdfPCell(new Phrase("No line items recorded.", fonts.small()));
             empty.setColspan(5);
             empty.setPadding(6f);
             empty.setBorder(Rectangle.BOTTOM);
             table.addCell(empty);
         }
         for (InvoiceItem line : lines) {
-            addBody(table, text(line.getDescription(), "-"), BODY, Element.ALIGN_LEFT);
-            addBody(table, plain(line.getQuantity()), BODY, Element.ALIGN_RIGHT);
-            addBody(table, money(invoice, line.getUnitPrice()), BODY, Element.ALIGN_RIGHT);
-            addBody(table, plain(line.getTaxRate()) + "%", BODY, Element.ALIGN_RIGHT);
-            addBody(table, money(invoice, line.getLineTotal()), BODY_BOLD, Element.ALIGN_RIGHT);
+            addBody(table, text(line.getDescription(), "-"), fonts.body(), Element.ALIGN_LEFT, fonts);
+            addBody(table, plain(line.getQuantity()), fonts.body(), Element.ALIGN_RIGHT, fonts);
+            addBody(table, money(invoice, line.getUnitPrice()), fonts.body(), Element.ALIGN_RIGHT, fonts);
+            addBody(table, plain(line.getTaxRate()) + "%", fonts.body(), Element.ALIGN_RIGHT, fonts);
+            addBody(table, money(invoice, line.getLineTotal()), fonts.bodyBold(), Element.ALIGN_RIGHT, fonts);
         }
         return table;
     }
 
-    private PdfPTable totals(Invoice invoice, Color accent) {
+    private PdfPTable totals(Invoice invoice, Fonts fonts) {
         PdfPTable table = new PdfPTable(new float[] { 1.4f, 1f });
         table.setWidthPercentage(52f);
         table.setHorizontalAlignment(Element.ALIGN_RIGHT);
-        totalRow(table, "Subtotal", money(invoice, invoice.getSubtotal()), false);
-        totalRow(table, "Tax", money(invoice, invoice.getTaxAmount()), false);
+        totalRow(table, "Subtotal", money(invoice, invoice.getSubtotal()), false, fonts);
+        totalRow(table, "Tax", money(invoice, invoice.getTaxAmount()), false, fonts);
         if (invoice.getDiscountAmount() != null && invoice.getDiscountAmount().signum() > 0) {
-            totalRow(table, "Discount", "− " + money(invoice, invoice.getDiscountAmount()), false);
+            totalRow(table, "Discount", "− " + money(invoice, invoice.getDiscountAmount()), false, fonts);
         }
-        totalRow(table, "Total", money(invoice, invoice.getTotalAmount()), true);
+        totalRow(table, "Total", money(invoice, invoice.getTotalAmount()), true, fonts);
         return table;
     }
 
-    private void totalRow(PdfPTable table, String label, String value, boolean emphasise) {
-        Font font = emphasise ? BODY_BOLD : BODY;
+    private void totalRow(PdfPTable table, String label, String value, boolean emphasise, Fonts fonts) {
+        Font font = emphasise ? fonts.bodyBold() : fonts.body();
+        float padding = fonts.compact() ? 3.5f : 5f;
         PdfPCell left = new PdfPCell(new Phrase(label, font));
         left.setBorder(Rectangle.TOP + Rectangle.BOTTOM);
         left.setBorderColor(RULE);
-        left.setPadding(5f);
+        left.setPadding(padding);
         PdfPCell right = new PdfPCell(new Phrase(value, font));
         right.setBorder(Rectangle.TOP + Rectangle.BOTTOM);
         right.setBorderColor(RULE);
         right.setHorizontalAlignment(Element.ALIGN_RIGHT);
-        right.setPadding(5f);
+        right.setPadding(padding);
         if (emphasise) right.setBackgroundColor(HIGHLIGHT);
         table.addCell(left);
         table.addCell(right);
     }
 
-    private void addHeading(PdfPTable table, String label, int alignment) {
-        PdfPCell cell = new PdfPCell(new Phrase(label, LABEL));
+    private void addHeading(PdfPTable table, String label, int alignment, Fonts fonts) {
+        PdfPCell cell = new PdfPCell(new Phrase(label, fonts.label()));
         cell.setHorizontalAlignment(alignment);
-        cell.setPadding(6f);
+        cell.setPadding(fonts.compact() ? 4f : 6f);
         cell.setBorder(Rectangle.BOTTOM);
         table.addCell(cell);
     }
 
-    private void addBody(PdfPTable table, String value, Font font, int alignment) {
+    private void addBody(PdfPTable table, String value, Font font, int alignment, Fonts fonts) {
         PdfPCell cell = new PdfPCell(new Phrase(value, font));
         cell.setHorizontalAlignment(alignment);
-        cell.setPadding(5f);
+        cell.setPadding(fonts.compact() ? 3.5f : 5f);
         cell.setBorder(Rectangle.BOTTOM);
         cell.setBorderColor(RULE);
         table.addCell(cell);
     }
 
-    private PdfPTable divider(Color accent) {
+    private PdfPTable divider(Color accent, Fonts fonts) {
         PdfPTable rule = new PdfPTable(1);
         rule.setWidthPercentage(100);
-        PdfPCell line = new PdfPCell(new Phrase(" ", SMALL));
+        PdfPCell line = new PdfPCell(new Phrase(" ", fonts.small()));
         line.setBorder(Rectangle.BOTTOM);
         line.setBorderColor(accent);
         line.setBorderWidthBottom(1.2f);
@@ -184,10 +198,11 @@ public class InvoicePdfService {
         return rule;
     }
 
-    private PdfPTable note(String value) {
+    /** A left-ruled block of text: the note, the account's payment terms and its remittance details. */
+    private PdfPTable note(String label, String value, Fonts fonts) {
         PdfPTable box = new PdfPTable(1);
         box.setWidthPercentage(100);
-        PdfPCell cell = new PdfPCell(new Phrase("A NOTE   " + value.trim(), SMALL));
+        PdfPCell cell = new PdfPCell(new Phrase(label + "   " + value.trim(), fonts.small()));
         cell.setBorder(Rectangle.LEFT);
         cell.setPadding(6f);
         cell.setPaddingLeft(10f);
@@ -195,10 +210,19 @@ public class InvoicePdfService {
         return box;
     }
 
-    private Paragraph footer(Invoice invoice) {
+    private Paragraph footer(Invoice invoice, Fonts fonts) {
+        String chosen = invoice.getFooterText();
+        if (chosen != null && !chosen.isBlank()) return paragraph(chosen, fonts.label());
         return paragraph("Values shown are the snapshot recorded when "
                 + text(invoice.getInvoiceNumber(), "this invoice")
-                + " was issued; later profile, catalogue or template changes do not alter it.", LABEL);
+                + " was issued; later profile, catalogue or template changes do not alter it.", fonts.label());
+    }
+
+    /** The caption under the signature rule: the account's own label, and its name when it gave one. */
+    private String signatureCaption(Invoice invoice) {
+        String label = text(invoice.getSignatureLabel(), "Authorised signatory");
+        String name = invoice.getSignatureName();
+        return notBlank(name) ? label + "  ·  " + name : label;
     }
 
     private PdfPCell openCell(int alignment) {
@@ -243,9 +267,9 @@ public class InvoicePdfService {
     }
 
     /** The stored template accent tints the invoice number; anything unparsable falls back to ink. */
-    private Paragraph invoiceNumber(String value, Color accent) {
-        Paragraph paragraph = new Paragraph(value, FontFactory.getFont(FontFactory.HELVETICA_BOLD, 20, Font.BOLD, accent));
-        paragraph.setLeading(24f);
+    private Paragraph invoiceNumber(String value, Color accent, Fonts fonts) {
+        Paragraph paragraph = new Paragraph(value, FontFactory.getFont(fonts.boldFamily(), 20 * fonts.scale(), Font.BOLD, accent));
+        paragraph.setLeading(fonts.titleLeading());
         return paragraph;
     }
 
@@ -265,6 +289,8 @@ public class InvoicePdfService {
 
     private String text(String value, String fallback) { return value == null || value.isBlank() ? fallback : value; }
 
+    private static boolean notBlank(String value) { return value != null && !value.isBlank(); }
+
     private void append(StringBuilder target, String value) {
         if (value == null || value.isBlank()) return;
         if (!target.isEmpty()) target.append("   ·   ");
@@ -277,5 +303,37 @@ public class InvoicePdfService {
             return new Color(Integer.parseInt(value.substring(1), 16));
         }
         return new Color(33, 37, 41);
+    }
+
+    /**
+     * The typeface set for a single document. The service is a shared singleton, so the fonts are built
+     * per render and passed down rather than stored on the bean: two invoices being rendered at the
+     * same time can then use different families without interfering with each other.
+     */
+    private record Fonts(String plainFamily, String boldFamily, float scale, boolean compact,
+            Font heading, Font label, Font body, Font bodyBold, Font small) {
+
+        static Fonts of(Invoice invoice) {
+            String family = invoice.getPresentationFont();
+            boolean compact = invoice.isCompactPresentation();
+            String plain;
+            String bold;
+            switch (family == null ? "DEFAULT" : family) {
+                case "SERIF" -> { plain = FontFactory.TIMES_ROMAN; bold = FontFactory.TIMES_BOLD; }
+                case "MONO" -> { plain = FontFactory.COURIER; bold = FontFactory.COURIER_BOLD; }
+                default -> { plain = FontFactory.HELVETICA; bold = FontFactory.HELVETICA_BOLD; }
+            }
+            float scale = compact ? 0.9f : 1f;
+            return new Fonts(plain, bold, scale, compact,
+                    FontFactory.getFont(bold, 11 * scale),
+                    FontFactory.getFont(plain, 8 * scale, Font.NORMAL, Color.GRAY),
+                    FontFactory.getFont(plain, 10 * scale),
+                    FontFactory.getFont(bold, 10 * scale),
+                    FontFactory.getFont(plain, 9 * scale));
+        }
+
+        float gap() { return compact ? 8f : 12f; }
+
+        float titleLeading() { return 24f * scale; }
     }
 }

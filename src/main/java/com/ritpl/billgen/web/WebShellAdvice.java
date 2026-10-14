@@ -35,7 +35,8 @@ public class WebShellAdvice {
             Map.entry("audit", "Audit history"), Map.entry("audit-types", "Audit management"),
             Map.entry("profile", "Profile and settings"), Map.entry("history", "Delivery history"),
             Map.entry("company", "Company profile"), Map.entry("categories", "Categories"),
-            Map.entry("products", "Products"), Map.entry("invoices", "Invoices"));
+            Map.entry("products", "Products"), Map.entry("invoices", "Invoices"),
+            Map.entry("account", "Profile and security"), Map.entry("settings", "Settings"));
 
     private final BackgroundJobQueryService jobs;
     private final SubscriptionExpiryNotificationService notifications;

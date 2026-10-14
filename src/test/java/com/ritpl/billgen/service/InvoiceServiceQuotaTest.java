@@ -42,9 +42,18 @@ class InvoiceServiceQuotaTest {
     private final CustomTemplateService customTemplates = mock(CustomTemplateService.class);
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
     private final AuditService audit = mock(AuditService.class);
+    // Numbering is the account's own choice, so the fixture answers it and leaves everything else default.
+    // Numbering and the printed defaults come from the account's settings row; the fixture answers both
+    // with an empty preferences object, so nothing about the quota path depends on a stubbed document.
+    private final CustomerSettingsService settings = mock(CustomerSettingsService.class, invocation -> {
+        String name = invocation.getMethod().getName();
+        if ("invoiceNumberPrefix".equals(name)) return "INV-";
+        if ("get".equals(name) || "find".equals(name)) return mock(com.ritpl.billgen.entity.CustomerSettings.class);
+        return org.mockito.Mockito.RETURNS_DEFAULTS.answer(invocation);
+    });
 
     private final InvoiceService service = new InvoiceService(invoices, customers, catalog, new InvoiceCalculator(),
-            subscriptions, customTemplates, jdbc, audit);
+            subscriptions, customTemplates, jdbc, audit, settings, mock(CustomerAlertService.class));
 
     @Test
     void aDraftInvoiceIsSavedWithoutConsumingAllowance() {

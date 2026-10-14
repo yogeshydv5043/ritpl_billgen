@@ -104,6 +104,68 @@ Product, invoice-report and audit XLSX exports reuse the corresponding tenant/ad
 - Writes to invoices, customer accounts, products, categories, plans or templates evict related caches.
 - Spring Session stores HTTP sessions in Redis under the `billgen:sessions` namespace, allowing a login to be served by either app node.
 
+## Customer panel
+
+The customer workspace (`/portal/**`) is the same service layer as the API and the Admin screens, so every
+rule below is enforced server-side and none of it depends on what a page hides.
+
+- **Profile and security.** The company profile (`/portal/company`) is the invoice identity: name, contact,
+  email, phone, address, GSTIN and logo. It is snapshotted onto each invoice at issue time, so a later edit
+  cannot rewrite a delivered document. Sign-in email is not customer-editable (it is the account's external
+  key and is changed by an administrator). `/portal/account` handles the customer's own password change,
+  which re-verifies the current password, enforces the same length policy as registration, and never writes
+  either password anywhere.
+- **Settings (`CustomerSettings`).** One row per account, read as transient defaults when none exists yet:
+  default plan/custom template, currency, invoice-number prefix, due-days, optional default tax rate, payment
+  terms, notes, footer, product unit and category, list page size, audit viewing period, four alert switches
+  and a default export range. A chosen default template must be one the plan currently grants (checked on
+  save, not merely in the select box). `CustomerSettingsService.pageSize/auditWindowStart/wantsAlert` are what
+  the list pages, the audit trail, the exports and the notification generators consult.
+- **Audit viewing window vs retention.** `AuditHistoryPeriod` (15 days, 1, 3, 6 or 12 months) bounds what the
+  account may list and export; the portal clamps the query's `from` date to that window, and the dashboard's
+  recent-activity list uses the same bound. This is a *viewing* period, deliberately not a deletion rule:
+  shortening it hides rows from the account and deletes nothing. Actual retention stays where it was - the
+  per-audit-type retention days applied by the administrative retention job, which a customer cannot reach.
+- **Plans.** A customer buys the plan's own billing period, or an explicit monthly/yearly term; the dates are
+  derived from the plan (`usageWindow()`) rather than from the page. The allowance a term grants is the plan's
+  per-period figure multiplied by the number of periods the term covers, so a twelve-month purchase of a
+  monthly plan is twelve periods, not one - an administrator's override always wins. Renewal, upgrade and
+  downgrade rules are enforced in `SubscriptionService.activate`: retired and inactive plans are refused, a
+  mid-term change requires the current plan to allow it, a mid-term downgrade additionally requires the target
+  plan to allow downgrades, usage issued inside an unexpired term carries forward, and a new term after expiry
+  starts clean. No renewal is automatic: this workspace takes no payment.
+- **Templates.** Only plan-granted system templates plus the account's own active custom designs are usable.
+  Customisation (accent, font, layout density, logo, bank details, payment terms, footer, signature caption
+  and name) is stored on the account's row, capped by the plan's custom-template limit, and applied through
+  `template_*_snapshot` columns copied at issue time. A system template is never updated by a customer
+  action. Resetting clears only the account's own presentation. A template used by any invoice is hidden rather
+  than deleted so issued documents keep their layout.
+- **Catalogue.** Products and categories support search, filter, whitelisted sort, database paging sized by
+  the account's own setting, activate/hide, delete, and an Excel export that honours the same filter as the
+  page. Products are validated against the plan's product limit. Deleting a product is safe by construction:
+  invoice lines keep their own description, price and tax, so no issued document changes. Deleting a category
+  unassigns its products instead of removing them.
+- **Invoices.** `/portal/invoices` searches, filters (status, overdue, issue-date range), sorts (whitelist)
+  and pages, and its preview panel runs the identical `InvoiceCalculator` path with no writes. A new invoice
+  may start as `DRAFT` or `SENT`; a draft is edited in place (lines replaced, totals recomputed) and only a
+  draft may be edited. The allowance is checked when an invoice is issued and deducted on success in the same
+  transaction; a draft consumes nothing, and a cancelled invoice does not return its slot - which is what
+  keeps a period's count honest. Repeated submissions are refused by a one-time form token
+  (`FormTokenGuard`) rather than by a disabled button, and the message points the customer at their invoice
+  list instead of creating a second document.
+- **Dashboard.** `CustomerDashboardService` answers every card and list with an aggregate or a bounded query
+  over that account's rows - template counts, custom-design slots, remaining allowance, invoices total and
+  this month, products total/active/hidden, categories, subscription state with days to expiry - plus the last
+  ten invoices, ten product changes, five category changes and ten audit rows. It is computed live; if a
+  figure cannot be read the page says so instead of showing a placeholder.
+- **Alerts.** `CustomerAlertService` writes the account's inbox entries for allowance warnings (deduplicated
+  per remaining level, using the plan's warning percentage), recorded payments and credential changes. A
+  switched-off topic writes nothing, except security notices, which an account cannot suppress on itself.
+  Expiry reminders remain in `SubscriptionExpiryNotificationService`, which honours the same preference.
+- **Multi-tenant rules.** Every portal read and write builds a `TenantScope` from the principal; a foreign id
+  is a `404`. Export routes reuse the listing queries, so they cannot see more than the UI can. Audit rows
+  stay append-only at the database level, and no portal route edits or deletes one.
+
 ## Deliberate starter limitations
 
 The Customer account's company profile (including logo) is the invoice identity; there is no separate client list. The app immediately activates customer-selected plans but does not collect or reconcile payments. It does not send invoice email, split GST into CGST/SGST, apply exchange rates, or implement tax compliance. Invoice PDFs are generated from stored snapshots and the print view can also be saved as a PDF by the browser. Review tax/legal requirements before production accounting use.

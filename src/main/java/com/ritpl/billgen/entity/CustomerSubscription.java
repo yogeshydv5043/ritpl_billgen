@@ -58,7 +58,38 @@ public class CustomerSubscription implements Serializable {
     @PreUpdate void onUpdate() { updatedAt = LocalDateTime.now(); }
     public boolean isActive() { return status == SubscriptionStatus.ACTIVE; }
     public boolean isEffective(LocalDate today) { return isActive() && !startedOn.isAfter(today) && (endsOn == null || !endsOn.isBefore(today)); }
-    public int getEffectiveInvoiceLimit() { return invoiceLimitOverride == null ? plan.getMaxMonthlyInvoices() : invoiceLimitOverride; }
+    /**
+     * The invoice allowance for this term. A plan states its figure per billing period, so a term bought
+     * for more than one period carries that figure once per period it contains - twelve monthly periods
+     * for a year of a monthly plan - and an override set by an administrator always wins.
+     */
+    public int getEffectiveInvoiceLimit() {
+        if (invoiceLimitOverride != null) return invoiceLimitOverride;
+        long perPeriod = plan == null ? 0 : plan.getMaxMonthlyInvoices();
+        if (perPeriod <= 0) return (int) Math.max(0, perPeriod);
+        return (int) Math.min(Integer.MAX_VALUE, perPeriod * purchasedCycles());
+    }
+
+    /** The figure the plan advertises, before the term length multiplies it. */
+    public int getInvoiceLimitPerPeriod() { return plan == null ? 0 : plan.getMaxMonthlyInvoices(); }
+
+    /** How many of the plan's own billing periods this term covers; a term of unknown length counts as one. */
+    public int purchasedCycles() {
+        if (plan == null || startedOn == null || endsOn == null) return 1;
+        java.time.Period window = plan.usageWindow();
+        if (window == null || window.isZero() || window.isNegative()) return 1;
+        java.time.LocalDate limit = endsOn.plusDays(1);
+        java.time.LocalDate cursor = startedOn;
+        int cycles = 0;
+        while (cursor.isBefore(limit)) {
+            java.time.LocalDate next = cursor.plus(window);
+            if (!next.isAfter(cursor)) break;            // a window that never advances cannot spin forever
+            cycles++;
+            cursor = next;
+            if (cycles >= 240) break;                     // no plan is sold for two centuries
+        }
+        return Math.max(1, cycles);
+    }
     public int getEffectiveProductLimit() { return productLimitOverride == null ? plan.getMaxProducts() : productLimitOverride; }
     public int getEffectiveCustomTemplateLimit() { return customTemplateLimitOverride == null ? plan.getMaxCustomTemplates() : customTemplateLimitOverride; }
     public Long getId() { return id; }

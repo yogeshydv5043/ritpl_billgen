@@ -137,6 +137,56 @@ public class ExcelExportService {
         } catch (IOException e) { throw new IllegalStateException("Could not create the invoice report workbook.", e); }
     }
 
+    /**
+     * A flat listing of exactly the invoices a page is showing, for export. Unlike the monthly report
+     * there is no grouping: the row set is whatever the caller's filters matched, in the caller's order.
+     */
+    public byte[] invoiceListing(List<Invoice> invoices, ZoneId zone, Map<String, String> filters, Instant generatedAt) {
+        try (SXSSFWorkbook workbook = new SXSSFWorkbook(100); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Styles styles = new Styles(workbook);
+            Sheet sheet = workbook.createSheet("Invoices");
+            List<String> headings = List.of("Invoice Number", "Status", "Issue Date", "Due Date", "Buyer", "Company Snapshot",
+                    "Template Snapshot", "Currency", "Subtotal", "Tax", "Discount", "Total", "Allowance Counted", "Generated At");
+            header(sheet, headings, styles.header());
+            int rowNum = 1;
+            for (Invoice invoice : invoices) {
+                Row row = sheet.createRow(rowNum++); int c = 0;
+                text(row, c++, invoice.getInvoiceNumber(), styles.text());
+                text(row, c++, invoice.getStatus() == null ? "" : invoice.getStatus().name(), styles.text());
+                text(row, c++, invoice.getIssueDate() == null ? "" : invoice.getIssueDate().toString(), styles.text());
+                text(row, c++, invoice.getDueDate() == null ? "" : invoice.getDueDate().toString(), styles.text());
+                text(row, c++, invoice.getBuyerName(), styles.text());
+                text(row, c++, invoice.getCompanyNameSnapshot(), styles.text());
+                text(row, c++, invoice.getTemplateName(), styles.text());
+                text(row, c++, invoice.getCurrency(), styles.text());
+                decimal(row, c++, invoice.getSubtotal(), styles.money());
+                decimal(row, c++, invoice.getTaxAmount(), styles.money());
+                decimal(row, c++, invoice.getDiscountAmount(), styles.money());
+                decimal(row, c++, invoice.getTotalAmount(), styles.money());
+                text(row, c++, invoice.isUsageCounted() ? "Yes" : "No", styles.text());
+                text(row, c, invoice.getGeneratedAt() == null ? "" : TIME.format(invoice.getGeneratedAt().atZone(zone)), styles.text());
+            }
+            filterAndFreeze(sheet, rowNum, headings.size());
+            widths(sheet, 22, 14, 16, 16, 28, 34, 24, 12, 16, 16, 16, 18, 20, 26);
+
+            Sheet info = workbook.createSheet("Export Info");
+            header(info, List.of("Field", "Value"), styles.header());
+            int infoRow = 1;
+            List<String[]> metadata = new ArrayList<>();
+            metadata.add(new String[] { "Rows exported", Integer.toString(invoices.size()) });
+            metadata.add(new String[] { "Generated at", TIME.format(generatedAt.atZone(zone)) });
+            metadata.add(new String[] { "Timezone", zone.getId() });
+            metadata.add(new String[] { "Safety", "Untrusted text is exported only as formula-protected string cells." });
+            filters.forEach((key, value) -> metadata.add(new String[] { key, value == null ? "" : value }));
+            for (String[] item : metadata) {
+                Row row = info.createRow(infoRow++);
+                text(row, 0, item[0], styles.text()); text(row, 1, item[1], styles.text());
+            }
+            filterAndFreeze(info, infoRow, 2); widths(info, 32, 100);
+            workbook.write(out); workbook.dispose(); return out.toByteArray();
+        } catch (IOException e) { throw new IllegalStateException("Could not create the invoice export workbook.", e); }
+    }
+
     public byte[] audit(List<AuditRecord> records) {
         try (SXSSFWorkbook workbook = new SXSSFWorkbook(100); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Styles styles = new Styles(workbook); Sheet sheet = workbook.createSheet("Audit Records");

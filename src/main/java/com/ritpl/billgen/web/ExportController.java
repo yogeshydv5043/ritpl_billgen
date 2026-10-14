@@ -3,7 +3,10 @@ package com.ritpl.billgen.web;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -15,6 +18,8 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import com.ritpl.billgen.entity.Invoice;
+import com.ritpl.billgen.entity.InvoiceStatus;
 import com.ritpl.billgen.security.AppUserPrincipal;
 import com.ritpl.billgen.security.TenantScope;
 import com.ritpl.billgen.service.AuditEventCommand;
@@ -34,10 +39,14 @@ public class ExportController {
     private final AuditService audit;
     private final ExcelExportService excel;
     private final SubscriptionService subscriptions;
+    private final com.ritpl.billgen.service.CustomerSettingsService settings;
+    /** A listing export is bounded so one click cannot build a workbook the size of the table. */
+    private static final int EXPORT_ROW_LIMIT = 5000;
 
     public ExportController(CatalogService catalog, InvoiceService invoices, AuditService audit,
-            ExcelExportService excel, SubscriptionService subscriptions) {
-        this.catalog = catalog; this.invoices = invoices; this.audit = audit; this.excel = excel; this.subscriptions = subscriptions;
+            ExcelExportService excel, SubscriptionService subscriptions, com.ritpl.billgen.service.CustomerSettingsService settings) {
+        this.catalog = catalog; this.invoices = invoices; this.audit = audit; this.excel = excel;
+        this.subscriptions = subscriptions; this.settings = settings;
     }
 
     @GetMapping("/admin/exports/products")
@@ -50,12 +59,61 @@ public class ExportController {
         });
     }
 
+    /** Exports the catalogue as the page is currently filtered and sorted. */
     @GetMapping("/portal/exports/products")
-    public ResponseEntity<byte[]> customerProducts(@AuthenticationPrincipal AppUserPrincipal principal) {
+    public ResponseEntity<byte[]> customerProducts(@AuthenticationPrincipal AppUserPrincipal principal,
+            @RequestParam(required = false) String q, @RequestParam(required = false) Long category,
+            @RequestParam(required = false) String status, @RequestParam(required = false) String type,
+            @RequestParam(required = false, defaultValue = "name") String sort,
+            @RequestParam(required = false, defaultValue = "asc") String dir) {
         TenantScope scope = TenantScope.from(principal);
-        return generate(scope, "PRODUCT_EXPORT", "PRODUCT", "Products", Map.of(), () -> {
-            var rows = catalog.findAll(scope); return new Payload(excel.products(rows), rows.size(), "my-products.xlsx");
+        com.ritpl.billgen.entity.ProductType productType = null;
+        if (type != null && !type.isBlank()) {
+            try { productType = com.ritpl.billgen.entity.ProductType.valueOf(type.trim().toUpperCase(java.util.Locale.ROOT)); }
+            catch (IllegalArgumentException ignored) { productType = null; }
+        }
+        Boolean active = "active".equals(status) ? Boolean.TRUE : "hidden".equals(status) ? Boolean.FALSE : null;
+        var filter = new com.ritpl.billgen.repository.ProductFilter(q, category, active, productType);
+        String property = List.of("name", "sku", "unitPrice", "taxRate", "active", "updatedAt", "createdAt").contains(sort) ? sort : "name";
+        var order = org.springframework.data.domain.Sort.by("desc".equalsIgnoreCase(dir)
+                ? org.springframework.data.domain.Sort.Direction.DESC : org.springframework.data.domain.Sort.Direction.ASC, property);
+        Map<String, Object> summary = Map.of("search", q == null ? "" : q, "categoryId", category == null ? "" : category.toString(),
+                "status", status == null ? "all" : status, "type", type == null ? "all" : type);
+        return generate(scope, "PRODUCT_EXPORT", "PRODUCT", "Products", summary, () -> {
+            var rows = catalog.findAll(scope, filter, order);
+            return new Payload(excel.products(rows), rows.size(), "my-products.xlsx");
         });
+    }
+
+    /** The invoice rows the invoices page is showing, with the same filters applied. */
+    @GetMapping("/portal/exports/invoices/list")
+    public ResponseEntity<byte[]> customerInvoiceListing(@AuthenticationPrincipal AppUserPrincipal principal,
+            @RequestParam(required = false) String q, @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate until,
+            @RequestParam(required = false, defaultValue = "false") boolean overdue,
+            @RequestParam(required = false, defaultValue = "issued") String sort,
+            @RequestParam(required = false, defaultValue = "desc") String dir) {
+        TenantScope scope = TenantScope.from(principal);
+        if (from != null && until != null && until.isBefore(from)) throw new IllegalArgumentException("End date must not be before start date.");
+        InvoiceStatus invoiceStatus = null;
+        if (status != null && !status.isBlank()) {
+            try { invoiceStatus = InvoiceStatus.valueOf(status.trim().toUpperCase(java.util.Locale.ROOT)); }
+            catch (IllegalArgumentException ignored) { invoiceStatus = null; }
+        }
+        var filter = new com.ritpl.billgen.repository.InvoiceFilter(q, invoiceStatus, from, until, overdue, null);
+        String property = List.of("issueDate", "dueDate", "invoiceNumber", "status", "totalAmount", "createdAt").contains(sort) ? sort : "issueDate";
+        var order = org.springframework.data.domain.Sort.by("asc".equalsIgnoreCase(dir)
+                ? org.springframework.data.domain.Sort.Direction.ASC : org.springframework.data.domain.Sort.Direction.DESC, property);
+        var page = invoices.page(scope, filter, org.springframework.data.domain.PageRequest.of(0, EXPORT_ROW_LIMIT, order));
+        Map<String, Object> summary = Map.of("search", q == null ? "" : q, "status", status == null ? "all" : status,
+                "from", from == null ? "" : from.toString(), "until", until == null ? "" : until.toString(), "overdue", overdue);
+        ZoneId zone = subscriptions.zone();
+        Instant generatedAt = Instant.now();
+        List<Invoice> rows = page.getContent();
+        return generate(scope, "INVOICE_EXPORT", "INVOICE", "Invoices", summary, () ->
+                new Payload(excel.invoiceListing(rows, zone, Map.of("Filters", summary.toString()), generatedAt),
+                        rows.size(), "my-invoices.xlsx"));
     }
 
     @GetMapping("/admin/exports/invoices")
@@ -79,13 +137,20 @@ public class ExportController {
         return auditExport(TenantScope.from(principal), customerId, actor, action, resourceType, outcome, from, until);
     }
 
+    /** An audit export sees exactly the account's own records, inside its authorised viewing window. */
     @GetMapping("/portal/exports/audit")
     public ResponseEntity<byte[]> customerAudit(@AuthenticationPrincipal AppUserPrincipal principal,
             @RequestParam(required = false) String actor, @RequestParam(required = false) String action,
             @RequestParam(required = false) String resourceType, @RequestParam(required = false) String outcome,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate until) {
-        return auditExport(TenantScope.from(principal), null, actor, action, resourceType, outcome, from, until);
+        TenantScope scope = TenantScope.from(principal);
+        LocalDate earliest = LocalDate.ofInstant(settings.auditWindowStart(scope.requireCustomerId()), subscriptions.zone());
+        if (until != null && until.isBefore(earliest)) {
+            throw new IllegalArgumentException("That period is outside your account's audit viewing window.");
+        }
+        if (from == null || from.isBefore(earliest)) from = earliest;
+        return auditExport(scope, null, actor, action, resourceType, outcome, from, until);
     }
 
     private ResponseEntity<byte[]> invoiceExport(TenantScope scope, Long customerId) {

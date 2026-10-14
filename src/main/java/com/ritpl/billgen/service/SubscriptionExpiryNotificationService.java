@@ -17,10 +17,12 @@ public class SubscriptionExpiryNotificationService {
     private final SubscriptionService subscriptions;
     private final SubscriptionNotificationLogRepository notifications;
     private final AuditService audit;
+    private final CustomerSettingsService settings;
 
     public SubscriptionExpiryNotificationService(SubscriptionService subscriptions,
-            SubscriptionNotificationLogRepository notifications, AuditService audit) {
+            SubscriptionNotificationLogRepository notifications, AuditService audit, CustomerSettingsService settings) {
         this.subscriptions = subscriptions; this.notifications = notifications; this.audit = audit;
+        this.settings = settings;
     }
 
     /** Daily in-app expiry notifications, deduplicated by subscription and reminder offset. */
@@ -32,6 +34,9 @@ public class SubscriptionExpiryNotificationService {
             LocalDate expiry = today.plusDays(days);
             for (var subscription : subscriptions.expiringOnOrBefore(expiry, expiry)) {
                 if (notifications.existsBySubscription_IdAndNotificationTypeAndDaysBefore(subscription.getId(), "EXPIRING", days)) continue;
+                // Reminders are the one message family an account may opt out of; the expiry notice below
+                // is not, because it records an event that has already happened to the subscription.
+                if (!settings.wantsAlert(subscription.getCustomerId(), com.ritpl.billgen.entity.CustomerAlertTopic.EXPIRY_REMINDER)) continue;
                 String message = "Your " + subscription.getPlan().getName() + " plan expires on " + expiry + ". Renew or choose a new plan to continue creating invoices.";
                 SubscriptionNotificationLog notification = new SubscriptionNotificationLog(subscription, "EXPIRING", days, message);
                 notification.setStatus(NotificationStatus.DELIVERED);

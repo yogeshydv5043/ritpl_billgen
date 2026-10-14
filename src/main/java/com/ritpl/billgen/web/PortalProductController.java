@@ -25,25 +25,67 @@ import jakarta.validation.Valid;
 @Controller
 @RequestMapping("/portal/products")
 public class PortalProductController {
+    /** Whitelisted sort keys, so a link can never name an arbitrary entity property. */
+    private static final Map<String, String> SORTS = Map.of(
+            "name", "name", "sku", "sku", "price", "unitPrice", "tax", "taxRate",
+            "status", "active", "updated", "updatedAt", "created", "createdAt");
+
     private final CatalogService catalog;
     private final ProductCategoryService categories;
+    private final com.ritpl.billgen.service.CustomerSettingsService settings;
 
-    public PortalProductController(CatalogService catalog, ProductCategoryService categories) {
-        this.catalog = catalog; this.categories = categories;
+    public PortalProductController(CatalogService catalog, ProductCategoryService categories,
+            com.ritpl.billgen.service.CustomerSettingsService settings) {
+        this.catalog = catalog; this.categories = categories; this.settings = settings;
     }
 
     @GetMapping
-    public String list(@AuthenticationPrincipal AppUserPrincipal principal, Model model) {
+    public String list(@AuthenticationPrincipal AppUserPrincipal principal, Model model,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Long category,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "name") String sort,
+            @RequestParam(required = false, defaultValue = "asc") String dir) {
         TenantScope scope = TenantScope.from(principal);
-        model.addAttribute("products", catalog.findAll(scope));
+        long customerId = scope.requireCustomerId();
+        com.ritpl.billgen.entity.ProductType productType = null;
+        if (type != null && !type.isBlank()) {
+            try { productType = com.ritpl.billgen.entity.ProductType.valueOf(type.trim().toUpperCase(java.util.Locale.ROOT)); }
+            catch (IllegalArgumentException ignored) { productType = null; }
+        }
+        Boolean active = "active".equals(status) ? Boolean.TRUE : "hidden".equals(status) ? Boolean.FALSE : null;
+        var filter = new com.ritpl.billgen.repository.ProductFilter(q, category, active, productType);
+        org.springframework.data.domain.Sort.Direction direction =
+                "desc".equalsIgnoreCase(dir) ? org.springframework.data.domain.Sort.Direction.DESC
+                        : org.springframework.data.domain.Sort.Direction.ASC;
+        String property = SORTS.getOrDefault(sort, "name");
+        var listing = catalog.page(scope, filter, org.springframework.data.domain.PageRequest.of(Math.max(0, page),
+                settings.pageSize(customerId), org.springframework.data.domain.Sort.by(direction, property)));
+        model.addAttribute("page", listing);
+        model.addAttribute("products", listing.getContent());
+        model.addAttribute("q", q);
+        model.addAttribute("category", category);
+        model.addAttribute("status", status);
+        model.addAttribute("type", type);
+        model.addAttribute("sort", SORTS.containsKey(sort) ? sort : "name");
+        model.addAttribute("dir", direction == org.springframework.data.domain.Sort.Direction.ASC ? "asc" : "desc");
+        model.addAttribute("activeFilters", filter.hasAnyFilter());
         model.addAttribute("categories", categories.findAll(scope));
+        model.addAttribute("counts", catalog.counts(scope));
         return "portal/products";
     }
 
     @GetMapping("/new")
     public String createForm(@AuthenticationPrincipal AppUserPrincipal principal, Model model) {
-        model.addAttribute("productForm", new ProductForm());
-        return form(TenantScope.from(principal), model, "Add catalogue item", "/portal/products");
+        TenantScope scope = TenantScope.from(principal);
+        ProductForm form = new ProductForm();
+        var preferences = settings.get(scope, scope.requireCustomerId());
+        form.setUnit(preferences.getDefaultUnit());
+        form.setCategoryId(preferences.getDefaultCategoryId());
+        model.addAttribute("productForm", form);
+        return form(scope, model, "Add catalogue item", "/portal/products");
     }
 
     @PostMapping
@@ -91,7 +133,9 @@ public class PortalProductController {
         try {
             var product = catalog.findById(scope, id);
             catalog.setActive(scope, id, !product.isActive());
-            redirect.addFlashAttribute("successMessage", "Catalogue item updated.");
+            redirect.addFlashAttribute("successMessage", product.isActive()
+                    ? "Hidden from new invoices. It stays on the invoices that already used it."
+                    : "Available again on new invoices.");
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("errorMessage", e.getMessage());
         }
@@ -102,7 +146,10 @@ public class PortalProductController {
     public String delete(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal principal, RedirectAttributes redirect) {
         try {
             catalog.delete(TenantScope.from(principal), id);
-            redirect.addFlashAttribute("successMessage", "Catalogue item deleted.");
+            // Deleting is safe here because an invoice never points at a live product row: the line keeps
+            // the description, price and tax it was issued with, so no delivered document changes.
+            redirect.addFlashAttribute("successMessage",
+                    "Catalogue item deleted. Invoices already issued keep its name, price and tax as they were on the day you sent them.");
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("errorMessage", e.getMessage());
         }
@@ -114,6 +161,8 @@ public class PortalProductController {
         model.addAttribute("formAction", action);
         model.addAttribute("productTypes", ProductType.values());
         model.addAttribute("categories", categories.findAll(scope));
+        // The amount field shows the account's own currency code rather than an assumed symbol.
+        model.addAttribute("currencyCode", settings.get(scope, scope.requireCustomerId()).getDefaultCurrency());
         return "portal/product-form";
     }
 }

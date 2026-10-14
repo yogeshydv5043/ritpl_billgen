@@ -34,12 +34,15 @@ public class InvoiceService {
     private final CustomTemplateService customTemplates;
     private final JdbcTemplate jdbc;
     private final AuditService audit;
+    private final CustomerSettingsService settings;
+    private final CustomerAlertService alerts;
 
     public InvoiceService(InvoiceRepository invoices, CustomerRepository customers, CatalogService catalog,
             InvoiceCalculator calculator, SubscriptionService subscriptions, CustomTemplateService customTemplates,
-            JdbcTemplate jdbc, AuditService audit) {
+            JdbcTemplate jdbc, AuditService audit, CustomerSettingsService settings, CustomerAlertService alerts) {
         this.invoices = invoices; this.customers = customers; this.catalog = catalog; this.calculator = calculator;
         this.subscriptions = subscriptions; this.customTemplates = customTemplates; this.jdbc = jdbc; this.audit = audit;
+        this.settings = settings; this.alerts = alerts;
     }
 
     @Transactional(readOnly = true)
@@ -47,6 +50,30 @@ public class InvoiceService {
         return scope.isAdminScope() ? invoices.findAllByOrderByCreatedAtDesc()
                 : invoices.findByCustomer_IdOrderByIssueDateDesc(scope.requireCustomerId());
     }
+    /**
+     * A customer's invoice list: optional search, status and issue-date filters, a whitelisted sort and
+     * the page size the account chose in its own settings. Ownership is applied from the scope, so an
+     * invoice belonging to another company is not merely hidden - it is never selected.
+     */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<Invoice> page(TenantScope scope,
+            com.ritpl.billgen.repository.InvoiceFilter filter, org.springframework.data.domain.Pageable pageable) {
+        org.springframework.data.jpa.domain.Specification<Invoice> tenant = scope.isAdminScope() ? null
+                : com.ritpl.billgen.repository.InvoiceSpecs.ofCustomer(scope.requireCustomerId());
+        org.springframework.data.jpa.domain.Specification<Invoice> conditions =
+                com.ritpl.billgen.repository.InvoiceSpecs.forFilter(filter, subscriptions.today());
+        org.springframework.data.jpa.domain.Specification<Invoice> combined =
+                tenant == null ? conditions : tenant.and(conditions);
+        return invoices.findAll(combined, CatalogService.safePage(pageable));
+    }
+
+    /** The account's most recent invoices, newest issue date first, for its dashboard. */
+    @Transactional(readOnly = true)
+    public List<Invoice> recent(TenantScope scope, int limit) {
+        return invoices.findByCustomer_IdOrderByIssueDateDesc(scope.requireCustomerId(),
+                CatalogService.bounded(limit));
+    }
+
     @Transactional(readOnly = true)
     public List<Invoice> findForCustomer(TenantScope scope, long customerId) {
         scope.requireCustomerAccess(customerId); return invoices.findByCustomer_IdOrderByIssueDateDesc(customerId);
@@ -61,6 +88,31 @@ public class InvoiceService {
         if (scope.isAdminScope()) return invoices.findWithDetailsById(id).orElseThrow(() -> notFound());
         return invoices.findOwned(id, scope.requireCustomerId()).orElseThrow(() -> notFound());
     }
+
+    /**
+     * What the invoice will say, computed by exactly the same maths {@link #create} uses - product
+     * snapshots, per-line tax, discount, rounding - and nothing is written, so previewing can never
+     * consume an allowance. The allowance is reported anyway, because a customer needs to know before
+     * pressing the button whether the invoice will be allowed at all.
+     */
+    @Transactional(readOnly = true)
+    public InvoicePreview preview(TenantScope scope, CreateInvoiceCommand command) {
+        if (command == null) throw new IllegalArgumentException("Nothing to preview.");
+        long ownerId = resolveOwnerId(scope, command.customerId());
+        validateDates(command.issueDate(), command.dueDate());
+        List<InvoiceLineInput> lines = resolveProductSnapshots(scope, command.lines());
+        if (lines.isEmpty()) throw new IllegalArgumentException("Add at least one line before previewing the invoice.");
+        InvoiceTotals totals = calculator.calculate(lines, command.discountAmount());
+        UsageQuota quota = subscriptions.usage(scope, ownerId);
+        boolean counts = command.initialStatus() != InvoiceStatus.DRAFT;
+        long remainingAfter = counts ? quota.remainingInvoices() - 1 : quota.remainingInvoices();
+        return new InvoicePreview(normalizeCurrency(command.currency()), totals, counts,
+                Math.max(0, remainingAfter), counts && remainingAfter < 0);
+    }
+
+    /** The figures a preview shows: the document as it would be issued, plus its effect on the allowance. */
+    public record InvoicePreview(String currency, InvoiceTotals totals, boolean consumesAllowance,
+            long remainingAfter, boolean allowanceBlocked) { }
 
     @Transactional
     @CacheEvict(cacheNames = "dashboard", allEntries = true)
@@ -84,18 +136,23 @@ public class InvoiceService {
 
             Invoice invoice = new Invoice();
             long sequence = jdbc.queryForObject("SELECT nextval('invoice_number_seq')", Long.class);
-            invoice.setInvoiceNumber("INV-%06d".formatted(sequence));
+            // The sequence is central and gapless per tenant boundary, so numbers stay unique however an
+            // account likes them to look; only the prefix is the account's own choice.
+            invoice.setInvoiceNumber(settings.invoiceNumberPrefix(ownerId) + "%06d".formatted(sequence));
             invoice.setCustomer(owner); invoice.setCurrency(normalizeCurrency(command.currency()));
             invoice.setIssueDate(command.issueDate()); invoice.setDueDate(command.dueDate());
             invoice.setTemplate(chosen.standard()); invoice.setCustomTemplate(chosen.custom());
             invoice.setTemplateNameSnapshot(chosen.name()); invoice.setTemplateStyleSnapshot(chosen.style());
             invoice.setTemplateAccentSnapshot(chosen.accentColor());
+            applyPresentation(scope, invoice, chosen.custom(), command, ownerId);
             invoice.setNotes(blankToNull(command.notes()));
             invoice.setSubtotal(totals.subtotal()); invoice.setTaxAmount(totals.taxAmount());
             invoice.setDiscountAmount(totals.discountAmount()); invoice.setTotalAmount(totals.totalAmount());
             invoice.setStatus(status); snapshotCompany(invoice, owner); addItems(invoice, totals);
             if (status == InvoiceStatus.SENT) { invoice.setUsageCounted(true); invoice.setUsageSubscription(activeSubscription); }
             Invoice saved = invoices.saveAndFlush(invoice);
+            // The notice follows the commit of the count, not a guess about it: a draft never warns.
+            if (status == InvoiceStatus.SENT) alerts.quotaAlert(activeSubscription);
             audit.record(AuditEventCommand.success(ownerId, "CREATE", "INVOICE", "Invoice", saved.getId(),
                     status == InvoiceStatus.DRAFT ? "Draft invoice created; no allowance was consumed." : "Invoice created as sent and counted against the active subscription.",
                     null, Map.of("invoiceNumber", saved.getInvoiceNumber(), "status", status.name(), "currency", saved.getCurrency(),
@@ -110,6 +167,101 @@ public class InvoiceService {
         }
     }
 
+    /**
+     * What the document will print, frozen at issue time: the layout the account had given its own
+     * template, with the account's defaults behind it, and a per-invoice override in front of both.
+     * A later edit - or deletion - of that template therefore cannot alter a delivered document.
+     */
+    private void applyPresentation(TenantScope scope, Invoice invoice, CustomInvoiceTemplate presentation,
+            CreateInvoiceCommand command, long ownerId) {
+        if (presentation != null) {
+            invoice.setTemplateFontSnapshot(presentation.getFontKey());
+            invoice.setTemplateDensitySnapshot(presentation.getLayoutDensity());
+            invoice.setTemplateTermsSnapshot(presentation.getPaymentTerms());
+            invoice.setTemplateFooterSnapshot(presentation.getFooterText());
+            invoice.setTemplateShowLogoSnapshot(presentation.isShowLogo());
+            if (presentation.isShowBankDetails()) invoice.setTemplateBankSnapshot(presentation.getBankDetails());
+            invoice.setTemplateSignatureLabelSnapshot(presentation.getSignatureLabel());
+            invoice.setTemplateSignatureNameSnapshot(presentation.getSignatureName());
+        }
+        var preferences = settings.get(scope, ownerId);
+        // Terms: the value typed on this invoice wins, then the template's, then the account's default.
+        if (command != null && !isBlank(command.paymentTerms())) {
+            invoice.setTemplateTermsSnapshot(command.paymentTerms().trim());
+        } else if (isBlank(invoice.getTemplateTermsSnapshot())) {
+            invoice.setTemplateTermsSnapshot(blankToNull(preferences.getDefaultPaymentTerms()));
+        }
+        if (isBlank(invoice.getTemplateFooterSnapshot())) invoice.setTemplateFooterSnapshot(blankToNull(preferences.getDefaultFooter()));
+    }
+
+    /**
+     * Editing a draft. The same validation and the same maths as {@link #create}, applied in place: the
+     * invoice keeps its number, its owner and its issue history, and only a document that has not been
+     * issued may change. An issued invoice is corrected by cancelling it and issuing another, which is
+     * what keeps a delivered figure from being rewritten.
+     */
+    @Transactional
+    @CacheEvict(cacheNames = "dashboard", allEntries = true)
+    public Invoice updateDraft(TenantScope scope, long id, CreateInvoiceCommand command) {
+        Invoice invoice = findById(scope, id);
+        long ownerId = invoice.getCustomerId();
+        Map<String, Object> before = describe(invoice);
+        try {
+            scope.requireWriteAccess();
+            if (command == null) throw new IllegalArgumentException("Nothing to save.");
+            if (invoice.getStatus() != InvoiceStatus.DRAFT) {
+                throw new IllegalArgumentException("Only a draft can be edited. This invoice was already issued, so it is kept exactly as it was delivered - cancel it and issue another instead.");
+            }
+            if (command.initialStatus() != null && command.initialStatus() != InvoiceStatus.DRAFT) {
+                throw new IllegalArgumentException("A draft stays a draft here; use the issue action to send it.");
+            }
+            validateDates(command.issueDate(), command.dueDate());
+            List<InvoiceLineInput> lines = resolveProductSnapshots(scope, command.lines());
+            if (lines.isEmpty()) throw new IllegalArgumentException("An invoice needs at least one line.");
+            InvoiceTotals totals = calculator.calculate(lines, command.discountAmount());
+            ResolvedTemplate chosen = resolveTemplate(scope, command, ownerId);
+
+            invoice.setIssueDate(command.issueDate()); invoice.setDueDate(command.dueDate());
+            invoice.setCurrency(normalizeCurrency(command.currency()));
+            invoice.setTemplate(chosen.standard()); invoice.setCustomTemplate(chosen.custom());
+            invoice.setTemplateNameSnapshot(chosen.name()); invoice.setTemplateStyleSnapshot(chosen.style());
+            invoice.setTemplateAccentSnapshot(chosen.accentColor());
+            applyPresentation(scope, invoice, chosen.custom(), command, ownerId);
+            invoice.setNotes(blankToNull(command.notes()));
+            invoice.setSubtotal(totals.subtotal()); invoice.setTaxAmount(totals.taxAmount());
+            invoice.setDiscountAmount(totals.discountAmount()); invoice.setTotalAmount(totals.totalAmount());
+            // Replacing the lines: the old rows are removed by orphanRemoval, so a draft never keeps a
+            // stale description or amount next to a recomputed total.
+            invoice.getItems().clear(); addItems(invoice, totals);
+            Invoice saved = invoices.saveAndFlush(invoice);
+            audit.record(AuditEventCommand.success(ownerId, "UPDATE", "INVOICE", "Invoice", id,
+                    "Draft invoice edited; totals recomputed on the server.", before, describe(saved)));
+            return saved;
+        } catch (RuntimeException ex) {
+            audit.recordFailure(AuditEventCommand.failure(ownerId, "UPDATE_FAILED", "INVOICE", "Invoice", id,
+                    "Draft edit attempt failed validation or authorization checks.",
+                    Map.of("failureType", ex.getClass().getSimpleName())));
+            throw ex;
+        }
+    }
+
+    /** The before/after pair an audit entry stores for an invoice: the figures, never a secret. */
+    private Map<String, Object> describe(Invoice invoice) {
+        Map<String, Object> values = new java.util.LinkedHashMap<>();
+        values.put("invoiceNumber", invoice.getInvoiceNumber());
+        values.put("status", invoice.getStatus() == null ? null : invoice.getStatus().name());
+        values.put("issueDate", String.valueOf(invoice.getIssueDate()));
+        values.put("dueDate", String.valueOf(invoice.getDueDate()));
+        values.put("currency", invoice.getCurrency());
+        values.put("template", invoice.getTemplateName());
+        values.put("subtotal", invoice.getSubtotal());
+        values.put("taxAmount", invoice.getTaxAmount());
+        values.put("discountAmount", invoice.getDiscountAmount());
+        values.put("totalAmount", invoice.getTotalAmount());
+        values.put("lines", invoice.getItems().size());
+        return values;
+    }
+
     @Transactional
     @CacheEvict(cacheNames = "dashboard", allEntries = true)
     public Invoice markSent(TenantScope scope, long id) {
@@ -119,6 +271,7 @@ public class InvoiceService {
             CustomerSubscription current = subscriptions.requireActiveForUpdate(scope);
             ensureAllowance(current, invoice.getCustomerId());
             invoice.setStatus(InvoiceStatus.SENT); invoice.setUsageCounted(true); invoice.setUsageSubscription(current);
+            alerts.quotaAlert(current);
             audit.record(AuditEventCommand.success(invoice.getCustomerId(), "ISSUE", "INVOICE", "Invoice", id,
                     "Draft invoice issued and counted against the active subscription allowance.",
                     Map.of("status", "DRAFT", "usageCounted", false), Map.of("status", "SENT", "usageCounted", true)));
@@ -137,6 +290,7 @@ public class InvoiceService {
         Invoice invoice = findById(scope, id); scope.requireWriteAccess();
         if (invoice.getStatus() != InvoiceStatus.SENT) throw new IllegalArgumentException("Only a sent invoice can be marked as paid.");
         invoice.setStatus(InvoiceStatus.PAID); invoice.setPaidAt(LocalDateTime.now());
+        alerts.paymentAlert(invoice);
         audit.record(AuditEventCommand.success(invoice.getCustomerId(), "UPDATE", "INVOICE", "Invoice", id,
                 "Payment recorded for invoice.", Map.of("status", "SENT"), Map.of("status", "PAID")));
         return invoice;
@@ -255,7 +409,8 @@ public class InvoiceService {
         if (requestedCustomerId != null && requestedCustomerId != ownId) throw new IllegalArgumentException("You can only create invoices for your own account.");
         return ownId;
     }
-    private String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+    private String blankToNull(String value) { return isBlank(value) ? null : value.trim(); }
+    private static boolean isBlank(String value) { return value == null || value.isBlank(); }
     private ResourceNotFoundException notFound() { return new ResourceNotFoundException("Invoice not found."); }
     private record ResolvedTemplate(BillTemplate standard, CustomInvoiceTemplate custom, String name, String style, String accentColor) { }
 }

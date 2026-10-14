@@ -19,8 +19,9 @@ import jakarta.persistence.Table;
 public class SubscriptionNotificationLog {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "subscription_id", nullable = false)
+    /** The term this notice is about, or null for an account-level alert such as a password change. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "subscription_id")
     private CustomerSubscription subscription;
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "customer_id", nullable = false)
@@ -40,6 +41,15 @@ public class SubscriptionNotificationLog {
     private Instant readAt;
 
     protected SubscriptionNotificationLog() { }
+    /** An account-level notice: the inbox belongs to the customer, whatever it is about. */
+    public SubscriptionNotificationLog(Customer customer, String notificationType, int daysBefore, String message) {
+        this.subscription = null;
+        this.customer = customer;
+        this.notificationType = notificationType;
+        this.daysBefore = daysBefore;
+        this.message = message;
+    }
+
     public SubscriptionNotificationLog(CustomerSubscription subscription, String notificationType, int daysBefore, String message) {
         this.subscription = subscription;
         this.customer = subscription.getCustomer();

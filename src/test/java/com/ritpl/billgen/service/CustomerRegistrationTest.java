@@ -21,6 +21,7 @@ import com.ritpl.billgen.entity.UserRole;
 import com.ritpl.billgen.repository.AppUserRepository;
 import com.ritpl.billgen.repository.CustomerRepository;
 import com.ritpl.billgen.repository.CustomerSubscriptionRepository;
+import com.ritpl.billgen.service.CustomerAlertService;
 import com.ritpl.billgen.repository.InvoiceRepository;
 
 /** Public self-service registration: role assignment, password hashing and duplicate prevention. */
@@ -36,8 +37,11 @@ class CustomerRegistrationTest {
     // the same policy the web tier uses is under test.
     private final InvoiceRepository invoices = mock(InvoiceRepository.class);
     private final CustomerSubscriptionRepository subscriptions = mock(CustomerSubscriptionRepository.class);
+    // Alerts are an inbox side effect registration does not exercise; the notice itself is covered by
+    // the security-alert path in the service.
+    private final CustomerAlertService alerts = mock(CustomerAlertService.class);
     private final CustomerService service = new CustomerService(customers, users, encoder, audit, invoices,
-            subscriptions, true);
+            subscriptions, true, alerts);
 
     @Test
     void registerCreatesACustomerLoginWithAHashedPassword() {

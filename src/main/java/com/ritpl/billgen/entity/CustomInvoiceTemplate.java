@@ -26,6 +26,17 @@ public class CustomInvoiceTemplate {
     @Enumerated(EnumType.STRING) @Column(name = "style_key", nullable = false, length = 20)
     private BillTemplateStyle style = BillTemplateStyle.CLASSIC;
     @Column(name = "accent_color", length = 7) private String accentColor;
+    // The presentation a customer chooses for its own copy of a layout. These columns exist only on
+    // the customer's template: the system template a plan bundles is never written from here.
+    @Column(name = "font_key", nullable = false, length = 16) private String fontKey = "DEFAULT";
+    @Column(name = "layout_density", nullable = false, length = 16) private String layoutDensity = "COMFORTABLE";
+    @Column(name = "show_logo", nullable = false) private boolean showLogo = true;
+    @Column(name = "show_bank_details", nullable = false) private boolean showBankDetails = false;
+    @Column(name = "bank_details", length = 600) private String bankDetails;
+    @Column(name = "payment_terms", length = 240) private String paymentTerms;
+    @Column(name = "footer_text", length = 600) private String footerText;
+    @Column(name = "signature_label", length = 120) private String signatureLabel;
+    @Column(name = "signature_name", length = 120) private String signatureName;
     @Column(nullable = false) private boolean active = true;
     @Column(nullable = false) private int version = 1;
     @Column(name = "deleted_at") private java.time.Instant deletedAt;
@@ -48,6 +59,32 @@ public class CustomInvoiceTemplate {
     public void setStyle(BillTemplateStyle v) { style = v == null ? BillTemplateStyle.CLASSIC : v; }
     public String getAccentColor() { return accentColor; }
     public void setAccentColor(String v) { accentColor = v; }
+    public String getFontKey() { return fontKey == null ? "DEFAULT" : fontKey; }
+    public void setFontKey(String v) { fontKey = v == null || v.isBlank() ? "DEFAULT" : v; }
+    public String getLayoutDensity() { return layoutDensity == null ? "COMFORTABLE" : layoutDensity; }
+    public void setLayoutDensity(String v) { layoutDensity = v == null || v.isBlank() ? "COMFORTABLE" : v; }
+    public boolean isCompact() { return "COMPACT".equals(getLayoutDensity()); }
+    public boolean isShowLogo() { return showLogo; }
+    public void setShowLogo(boolean v) { showLogo = v; }
+    public boolean isShowBankDetails() { return showBankDetails; }
+    public void setShowBankDetails(boolean v) { showBankDetails = v; }
+    public String getBankDetails() { return bankDetails; }
+    public void setBankDetails(String v) { bankDetails = v; }
+    public String getPaymentTerms() { return paymentTerms; }
+    public void setPaymentTerms(String v) { paymentTerms = v; }
+    public String getFooterText() { return footerText; }
+    public void setFooterText(String v) { footerText = v; }
+    public String getSignatureLabel() { return signatureLabel; }
+    public void setSignatureLabel(String v) { signatureLabel = v; }
+    public String getSignatureName() { return signatureName; }
+    public void setSignatureName(String v) { signatureName = v; }
+
+    /** Back to the plain layout the style defines: colors and text the customer added are dropped. */
+    public void resetPresentation() {
+        fontKey = "DEFAULT"; layoutDensity = "COMFORTABLE"; showLogo = true; showBankDetails = false;
+        bankDetails = null; paymentTerms = null; footerText = null; signatureLabel = null; signatureName = null;
+    }
+
     public boolean isActive() { return active; }
     public int getVersion() { return version; }
     public void setVersion(int value) { version = Math.max(1, value); }

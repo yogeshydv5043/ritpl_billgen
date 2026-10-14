@@ -53,7 +53,67 @@ public class ProductCategoryService {
 
         @Transactional
     @CacheEvict(cacheNames = "dashboard", allEntries = true)
+    /** Paged, searchable category list for the owning account. */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<ProductCategory> page(TenantScope scope, String search,
+            org.springframework.data.domain.Pageable pageable) {
+        long customerId = scope.requireCustomerId();
+        return categories.findAll(com.ritpl.billgen.repository.ProductSpecs.categories(customerId, search),
+                com.ritpl.billgen.service.CatalogService.safePage(pageable));
+    }
+
+    /** How many items each category holds, counted in the database rather than in the page. */
+    @Transactional(readOnly = true)
+    public java.util.Map<Long, Long> productCounts(TenantScope scope) {
+        java.util.Map<Long, Long> counts = new java.util.LinkedHashMap<>();
+        for (Object[] row : products.countGroupedByCategory(scope.requireCustomerId())) {
+            if (row[0] != null) counts.put((Long) row[0], (Long) row[1]);
+        }
+        return counts;
+    }
+
+    /** A hidden category cannot be picked on a new item, but items already in it keep it. */
+    @Transactional
+    @CacheEvict(cacheNames = {"dashboard"}, allEntries = true)
+    public ProductCategory setActive(TenantScope scope, long id, boolean active) {
+        ProductCategory category = findById(scope, id);
+        scope.requireWriteAccess();
+        boolean before = category.isActive();
+        if (before == active) return category;
+        category.setActive(active);
+        ProductCategory saved = categories.save(category);
+        audit.record(AuditEventCommand.success(scope.requireCustomerId(), "UPDATE_STATUS", "CATEGORY",
+                "Product category", id, active ? "Customer made a category available again."
+                        : "Customer hid a category from new catalogue items.",
+                Map.of("active", before), Map.of("active", active)));
+        return saved;
+    }
+
+    @Transactional(readOnly = true)
+    public long countAll(TenantScope scope) {
+        return categories.countByCustomer_Id(scope.requireCustomerId());
+    }
+
+    /** The categories this account touched most recently, bounded to a dashboard-sized page. */
+    @Transactional(readOnly = true)
+    public List<ProductCategory> recent(TenantScope scope, int limit) {
+        return categories.findByCustomer_IdOrderByUpdatedAtDesc(scope.requireCustomerId(),
+                com.ritpl.billgen.service.CatalogService.bounded(limit));
+    }
+
+    @Transactional(readOnly = true)
+    public long countActive(TenantScope scope) {
+        return categories.countByCustomer_IdAndActiveTrue(scope.requireCustomerId());
+    }
+
     public ProductCategory save(TenantScope scope, Long id, String name, String description) {
+        return save(scope, id, name, description, null);
+    }
+
+    /** {@code active == null} leaves the current availability untouched. */
+    @Transactional
+    @CacheEvict(cacheNames = {"dashboard"}, allEntries = true)
+    public ProductCategory save(TenantScope scope, Long id, String name, String description, Boolean active) {
         scope.requireWriteAccess();
         long ownerId = scope.requireCustomerId();
         if (name == null || name.isBlank() || name.trim().length() > 120) {
@@ -72,6 +132,7 @@ public class ProductCategoryService {
         category.setCustomer(owner);
         category.setName(cleanName);
         category.setDescription(description == null || description.isBlank() ? null : description.trim());
+        if (active != null) category.setActive(active);
         ProductCategory saved = categories.save(category);
         audit.record(AuditEventCommand.success(ownerId, id == null ? "CREATE" : "UPDATE", "CATEGORY", "Product category", saved.getId(),
                 id == null ? "Customer created a product category." : "Customer updated a product category.", before,

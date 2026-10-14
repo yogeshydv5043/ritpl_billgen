@@ -53,14 +53,25 @@
 
     <div class="nav-label" sec:authorize="hasRole('CUSTOMER')">My account</div>
     <nav class="nav-links" sec:authorize="hasRole('CUSTOMER')">
-        <a th:href="@{/portal}" th:classappend="${section == 'portal-home'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">◧</span><span>Home</span></a>
+        <a th:href="@{/portal}" th:classappend="${section == 'portal-home'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">◧</span><span>Dashboard</span></a>
+        <a th:href="@{/portal/plan}" th:classappend="${section == 'plan'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">◆</span><span>Plan and usage</span><span class="nav-count" th:if="${unreadCount != null and unreadCount > 0}" th:text="${unreadCount}">0</span></a>
+        <a th:href="@{/portal/notifications}" th:classappend="${section == 'notifications'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">◉</span><span>Notifications</span></a>
+        <a th:href="@{/portal/account}" th:classappend="${section == 'account'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">⚑</span><span>Profile and security</span></a>
+        <a th:href="@{/portal/settings}" th:classappend="${section == 'settings'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">⚙</span><span>Settings</span></a>
+    </nav>
+
+    <div class="nav-label" sec:authorize="hasRole('CUSTOMER')">Billing</div>
+    <nav class="nav-links" sec:authorize="hasRole('CUSTOMER')">
         <a th:href="@{/portal/invoices}" th:classappend="${section == 'invoices'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">▥</span><span>My invoices</span></a>
+        <a th:href="@{/portal/templates}" th:classappend="${section == 'templates'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">▧</span><span>Invoice templates</span></a>
+        <a th:href="@{/portal/company}" th:classappend="${section == 'company'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">▣</span><span>Company details</span></a>
+    </nav>
+
+    <div class="nav-label" sec:authorize="hasRole('CUSTOMER')">Catalogue and records</div>
+    <nav class="nav-links" sec:authorize="hasRole('CUSTOMER')">
         <a th:href="@{/portal/products}" th:classappend="${section == 'products'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">◇</span><span>Products</span></a>
         <a th:href="@{/portal/categories}" th:classappend="${section == 'categories'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">▤</span><span>Categories</span></a>
-        <a th:href="@{/portal/templates}" th:classappend="${section == 'templates'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">▧</span><span>Custom templates</span></a>
-        <a th:href="@{/portal/company}" th:classappend="${section == 'company'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">▣</span><span>Company profile</span></a>
-        <a th:href="@{/portal/plan}" th:classappend="${section == 'plan'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">◆</span><span>Plan and usage</span><span class="nav-count" th:if="${unreadCount != null and unreadCount > 0}" th:text="${unreadCount}">0</span></a>
-        <a th:href="@{/portal/audit}" th:classappend="${section == 'audit'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">⌕</span><span>Audit trail</span></a>
+        <a th:href="@{/portal/audit}" th:classappend="${section == 'audit'} ? ' is-active'"><span class="nav-icon" aria-hidden="true">⌕</span><span>Audit history</span></a>
     </nav>
 
     <div class="sidebar-spacer"></div>

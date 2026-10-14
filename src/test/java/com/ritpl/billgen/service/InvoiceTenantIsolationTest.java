@@ -24,7 +24,8 @@ class InvoiceTenantIsolationTest {
         when(invoices.findOwned(902L, 17L)).thenReturn(Optional.empty());
 
         InvoiceService service = new InvoiceService(invoices, customers, mock(CatalogService.class), new InvoiceCalculator(),
-                subscriptions, mock(CustomTemplateService.class), jdbc, mock(AuditService.class));
+                subscriptions, mock(CustomTemplateService.class), jdbc, mock(AuditService.class),
+                mock(CustomerSettingsService.class), mock(CustomerAlertService.class));
 
         assertThrows(ResourceNotFoundException.class,
                 () -> service.findById(TenantScope.ofCustomer(17L), 902L));

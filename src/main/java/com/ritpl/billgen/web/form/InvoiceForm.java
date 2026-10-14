@@ -22,6 +22,7 @@ public class InvoiceForm {
     @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) private LocalDate issueDate = LocalDate.now();
     @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) private LocalDate dueDate = LocalDate.now().plusDays(14);
     @Size(max = 1200) private String notes;
+    @Size(max = 240) private String paymentTerms;
     @Pattern(regexp = "[A-Za-z]{3}") private String currency = "INR";
     @NotNull private InvoiceStatus initialStatus = InvoiceStatus.DRAFT;
     @DecimalMin("0.00") @Digits(integer=12, fraction=2) private BigDecimal discountAmount = BigDecimal.ZERO;
@@ -30,13 +31,14 @@ public class InvoiceForm {
     public CreateInvoiceCommand toCommand() {
         return new CreateInvoiceCommand(null, issueDate, dueDate, notes, currency, templateId,
                 lines.stream().map(InvoiceLineForm::toInput).collect(Collectors.toList()), initialStatus,
-                customTemplateId, discountAmount);
+                customTemplateId, discountAmount, paymentTerms);
     }
     public Long getTemplateId(){return templateId;} public void setTemplateId(Long v){templateId=v;}
     public Long getCustomTemplateId(){return customTemplateId;} public void setCustomTemplateId(Long v){customTemplateId=v;}
     public LocalDate getIssueDate(){return issueDate;} public void setIssueDate(LocalDate v){issueDate=v;}
     public LocalDate getDueDate(){return dueDate;} public void setDueDate(LocalDate v){dueDate=v;}
     public String getNotes(){return notes;} public void setNotes(String v){notes=v;}
+    public String getPaymentTerms(){return paymentTerms;} public void setPaymentTerms(String v){paymentTerms=v;}
     public String getCurrency(){return currency;} public void setCurrency(String v){currency=v;}
     public InvoiceStatus getInitialStatus(){return initialStatus;} public void setInitialStatus(InvoiceStatus v){initialStatus=v;}
     public BigDecimal getDiscountAmount(){return discountAmount;} public void setDiscountAmount(BigDecimal v){discountAmount=v;}

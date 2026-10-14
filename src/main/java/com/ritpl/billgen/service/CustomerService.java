@@ -36,6 +36,7 @@ public class CustomerService {
     private final AuditService audit;
     private final InvoiceRepository invoices;
     private final CustomerSubscriptionRepository subscriptions;
+    private final CustomerAlertService alerts;
     /**
      * Documented deletion policy. Outstanding invoices block a soft delete unless the administrator
      * confirms the override, because the invoice history still belongs to a live relationship.
@@ -45,10 +46,10 @@ public class CustomerService {
     public CustomerService(CustomerRepository customers, AppUserRepository users, PasswordEncoder passwordEncoder,
             AuditService audit, InvoiceRepository invoices, CustomerSubscriptionRepository subscriptions,
             @org.springframework.beans.factory.annotation.Value("${app.customers.deletion.block-outstanding-invoices:true}")
-            boolean blockOutstandingInvoices) {
+            boolean blockOutstandingInvoices, CustomerAlertService alerts) {
         this.customers = customers; this.users = users; this.passwordEncoder = passwordEncoder; this.audit = audit;
         this.invoices = invoices; this.subscriptions = subscriptions;
-        this.blockOutstandingInvoices = blockOutstandingInvoices;
+        this.blockOutstandingInvoices = blockOutstandingInvoices; this.alerts = alerts;
     }
 
     /** Admins may search all real customer accounts; customers only receive their own account. */
@@ -184,6 +185,8 @@ public class CustomerService {
         login.setPasswordHash(passwordEncoder.encode(password));
         audit.record(AuditEventCommand.success(id, "RESET_PASSWORD", "CUSTOMER_LOGIN", "Customer login", login.getId(),
                 "Administrator reset a customer login password; the password itself is never logged.", null, Map.of("passwordChanged", true)));
+        alerts.securityAlert(id, "An administrator reset the password for this account on " + java.time.LocalDate.now()
+                + ". Sign in with the new password you were given.");
     }
 
     /**
@@ -208,6 +211,37 @@ public class CustomerService {
         audit.record(AuditEventCommand.success(null, "PASSWORD_CHANGE", "ADMIN_ACCOUNT", "Administrator login", user.getId(),
                 "Administrator changed their own password. The password itself is never logged.", null,
                 Map.of("passwordChanged", true)));
+    }
+
+    /**
+     * Lets a signed-in account change its own password. The current password is verified first, the new
+     * one must clear the same strength rule the platform sets for administrators, and neither value is
+     * ever written to the audit trail - only the fact of the change, or of a rejected attempt, is.
+     */
+    @Transactional
+    public void changeOwnPassword(com.ritpl.billgen.security.AppUserPrincipal principal, String currentPassword,
+            String newPassword) {
+        if (principal == null || principal.getId() == null) throw new IllegalArgumentException("Sign in again to change a password.");
+        AppUser user = users.findById(principal.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found."));
+        Long customerId = user.getCustomer() == null ? null : user.getCustomer().getId();
+        if (customerId == null) throw new IllegalArgumentException("This login is not tied to a company account.");
+        if (currentPassword == null || !passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            audit.record(AuditEventCommand.failure(customerId, "PASSWORD_CHANGE_FAILURE", "ACCOUNT_SECURITY",
+                    "Account login", user.getId(),
+                    "A password change was rejected because the current password did not match.", Map.of()));
+            throw new IllegalArgumentException("The current password is not correct.");
+        }
+        validatePassword(newPassword);
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        users.save(user);
+        audit.record(AuditEventCommand.success(customerId, "PASSWORD_CHANGE", "ACCOUNT_SECURITY", "Account login",
+                user.getId(), "Customer changed their own password. The password itself is never logged.", null,
+                Map.of("passwordChanged", true)));
+        // The account is told in its own inbox, whatever its alert preferences say: a credential change
+        // is exactly the notice an account must not be able to switch off on itself.
+        alerts.securityAlert(customerId, "Your password was changed on " + java.time.LocalDate.now()
+                + ". If that was not you, tell the person who administers this workspace.");
     }
 
     private void apply(CustomerAccountCommand command, Customer customer) {

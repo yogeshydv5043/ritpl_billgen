@@ -5,33 +5,80 @@
 <main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content">
     <div th:replace="~{fragments/layout :: flash}"></div>
     <section class="panel notice notice-warning" th:if="${!#lists.isEmpty(notifications)}"><div th:each="notification : ${notifications}" class="notification-row"><p th:text="${notification.message}">Your plan expires soon.</p><form th:if="${notification.status.name() != 'READ'}" th:action="@{/portal/notifications/{id}/read(id=${notification.id})}" method="post"><button class="button button-small button-secondary" type="submit">Mark read</button></form></div></section>
+
     <section class="welcome-row">
-        <div><span class="kicker">YOUR PRIVATE BILLING WORKSPACE</span><h1 th:text="${'Welcome, ' + customer.companyName}">Welcome, Northstar Studio</h1><p class="page-lede">Your products, categories, invoices and templates — only yours to manage.</p></div>
-        <a class="button button-primary" th:href="@{/portal/invoices/new}" th:if="${!#lists.isEmpty(templates)}"><span class="button-plus">＋</span> Create invoice</a>
+        <div><span class="kicker">YOUR PRIVATE BILLING WORKSPACE</span><h1 th:text="'Welcome, ' + ${customer.companyName}">Welcome, Northstar Studio</h1><p class="page-lede">Your products, categories, invoices and templates — only yours to manage. Every figure below is read from your account's own records.</p></div>
+        <a class="button button-primary" th:href="@{/portal/invoices/new}" th:if="${dashboard != null and dashboard.hasPlan}"><span class="button-plus">＋</span> Create invoice</a>
+        <a class="button button-primary" th:href="@{/portal/plan}" th:if="${dashboard != null and !dashboard.hasPlan}">Choose a plan <span>→</span></a>
     </section>
-    <section class="metrics-grid" aria-label="My account summary">
-        <article class="metric-card metric-highlight"><div class="metric-top"><span class="metric-icon icon-violet">▤</span><span class="metric-period">YOUR ACCOUNT</span></div><p class="metric-label">Invoices generated</p><div class="metric-value"><span th:text="${stats.invoiceCount}">0</span></div><span class="metric-foot">Created by your account</span></article>
-        <article class="metric-card"><div class="metric-top"><span class="metric-icon icon-blue">◇</span></div><p class="metric-label">Available products</p><div class="metric-value"><span th:text="${stats.productCount}">0</span></div><span class="metric-foot">In your catalogue</span></article>
-        <article class="metric-card"><div class="metric-top"><span class="metric-icon icon-green">▧</span></div><p class="metric-label">Categories</p><div class="metric-value"><span th:text="${stats.categoryCount}">0</span></div><span class="metric-foot">Organising your products</span></article>
-        <article class="metric-card"><div class="metric-top"><span class="metric-icon icon-amber">✳</span><span class="metric-period" th:text="${subscription != null ? 'ACTIVE' : 'NO PLAN'}">ACTIVE</span></div><p class="metric-label">Purchased plan</p><div class="metric-value plan-metric-value"><span th:text="${subscription != null ? subscription.plan.name : 'Choose a plan'}">Starter</span></div><span class="metric-foot"><a th:href="@{/portal/plan}">Manage your plan →</a></span></article>
-        <article class="metric-card"><div class="metric-top"><span class="metric-icon icon-blue">↗</span><span class="metric-period" th:text="${subscription != null ? quota.remainingInvoices + ' LEFT' : 'NO PLAN'}">10 LEFT</span></div><p class="metric-label">Invoice allowance</p><div class="metric-value"><span th:text="${subscription != null ? quota.invoicesUsed + ' / ' + quota.invoiceLimit : '—'}">0 / 10</span></div><span class="metric-foot" th:if="${subscription != null}" th:text="${'Renews / expires ' + subscription.endsOn}">Expires</span></article>
+
+    <div class="panel notice notice-warning" th:if="${dashboardError != null}" role="alert"><p th:text="${dashboardError}">Live figures could not be read.</p></div>
+
+    <th:block th:if="${dashboard != null}">
+    <section class="metrics-grid" aria-label="Live account figures">
+        <a class="metric-card" th:each="card : ${dashboard.cards}" th:href="@{${card.href}}"
+           th:classappend="${card.tone == 'warning' ? ' metric-warning' : (card.tone == 'highlight' ? ' metric-highlight' : '')}">
+            <span class="metric-top">
+                <span class="metric-icon" th:classappend="${card.tone == 'warning' ? 'icon-amber' : (card.tone == 'positive' ? 'icon-green' : 'icon-violet')}" aria-hidden="true" th:text="${card.icon}">▤</span>
+                <span class="metric-period" th:text="${#strings.toUpperCase(card.tone)}">LIVE</span>
+            </span>
+            <p class="metric-label" th:text="${card.label}">Metric</p>
+            <div class="metric-value"><span th:text="${card.value}">0</span></div>
+            <span class="metric-foot"><span th:text="${card.note}">note</span><span class="metric-arrow" aria-hidden="true">→</span></span>
+        </a>
     </section>
+
+    <section class="panel quota-panel" th:if="${dashboard.hasPlan}" th:aria-label="'Invoice allowance'">
+        <div class="panel-heading"><div><span class="kicker">QUOTA USAGE</span><h2 th:text="${dashboard.invoiceLimit > 0 ? 'Invoice allowance · ' + dashboard.planName : 'Unlimited invoices on your plan'}">Invoice allowance</h2></div><a class="text-link" th:href="@{/portal/plan}">Plan details <span>→</span></a></div>
+        <div th:replace="~{fragments/components :: progress(${dashboard.invoicesUsed}, ${dashboard.invoiceLimit > 0 ? dashboard.invoiceLimit : null}, null)}"></div>
+        <p class="quota-note"><span th:if="${dashboard.invoiceLimit > 0}" th:text="${dashboard.remainingInvoices + ' invoice(s) left of ' + dashboard.invoiceLimit + ' this period · resets on ' + dashboard.expiresOn}">0 left</span><span th:if="${dashboard.invoiceLimit <= 0}">No cap on this plan — invoices are limited only by your account's activity.</span> <strong th:if="${dashboard.quotaExhausted}" class="quota-blocked">Allowance used up. Buying the next term restores it; cancelling an invoice does not.</strong></p>
+    </section>
+
+    <div class="panel notice notice-warning expiry-banner" th:if="${dashboard.expiringSoon}"><p><strong>Your plan ends on <span th:text="${dashboard.expiresOn}">date</span> — <span th:text="${dashboard.daysToExpiry}">0</span> day(s) left.</strong> Renew to keep invoicing without a gap.</p><a class="button button-small button-primary" th:href="@{/portal/plan}">Renew now <span>→</span></a></div>
 
     <section class="dashboard-grid">
         <article class="panel invoice-panel">
-            <div class="panel-heading"><div><span class="kicker">YOUR PAPER TRAIL</span><h2>Recent invoices</h2></div><a class="text-link" th:href="@{/portal/invoices}">All invoices <span>→</span></a></div>
-            <div class="table-wrap"><table class="data-table"><thead><tr><th>INVOICE</th><th>TEMPLATE</th><th>ISSUED</th><th>AMOUNT</th><th>STATUS</th><th></th></tr></thead>
-                <tbody><tr th:each="invoice : ${invoices}" th:if="${invoiceStat.index < 7}"><td><a class="table-primary" th:href="@{/portal/invoices/{id}(id=${invoice.id})}" th:text="${invoice.invoiceNumber}">INV-001001</a></td><td th:text="${invoice.templateName}">Classic</td><td th:text="${invoice.issueDate}">2026-01-01</td><td class="table-amount"><span th:text="${invoice.currency}">INR</span> <span th:text="${#numbers.formatDecimal(invoice.totalAmount,1,'COMMA',2,'POINT')}">0.00</span></td><td><span class="status-pill" th:classappend="| status-${#strings.toLowerCase(invoice.status.name())}|" th:text="${invoice.status}">SENT</span></td><td><a class="row-arrow" th:href="@{/portal/invoices/{id}(id=${invoice.id})}" aria-label="Open invoice">↗</a></td></tr>
-                <tr th:if="${#lists.isEmpty(invoices)}"><td colspan="6"><div class="empty-inline"><span class="empty-icon">▤</span><strong>Your next invoice starts here.</strong><span>Choose a template from your plan and create a bill.</span><a th:if="${!#lists.isEmpty(templates)}" th:href="@{/portal/invoices/new}">Create invoice <span>→</span></a><a th:if="${#lists.isEmpty(templates)}" th:href="@{/portal/plan}">Choose a plan first <span>→</span></a></div></td></tr>
+            <div class="panel-heading"><div><span class="kicker">YOUR PAPER TRAIL</span><h2>Latest invoices</h2></div><a class="text-link" th:href="@{/portal/invoices}">All invoices <span>→</span></a></div>
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>INVOICE</th><th>ISSUED</th><th>DUE</th><th>AMOUNT</th><th>STATUS</th><th></th></tr></thead>
+                <tbody><tr th:each="row : ${dashboard.recentInvoices}"><td><a class="table-primary" th:href="@{/portal/invoices/{id}(id=${row.id})}" th:text="${row.invoiceNumber}">INV-001001</a></td><td th:text="${row.issueDate != null ? row.issueDate : 'Draft'}">2026-01-01</td><td><span th:text="${row.dueDate != null ? row.dueDate : '—'}">2026-01-15</span><span class="overdue-flag" th:if="${row.overdue}">OVERDUE</span></td><td class="table-amount"><span th:text="${row.currency}">INR</span> <span th:text="${row.total != null ? #numbers.formatDecimal(row.total,1,'COMMA',2,'POINT') : '0.00'}">0.00</span></td><td><span class="status-pill" th:classappend="| status-${#strings.toLowerCase(row.status)}|" th:text="${row.statusLabel}">SENT</span></td><td><a class="row-arrow" th:href="@{/portal/invoices/{id}(id=${row.id})}" aria-label="Open invoice">↗</a></td></tr>
+                <tr th:if="${#lists.isEmpty(dashboard.recentInvoices)}"><td colspan="6"><div class="empty-inline"><span class="empty-icon">▤</span><strong>Your next invoice starts here.</strong><span>Choose a template from your plan and create a bill.</span><a th:if="${dashboard.hasPlan}" th:href="@{/portal/invoices/new}">Create invoice <span>→</span></a><a th:unless="${dashboard.hasPlan}" th:href="@{/portal/plan}">Choose a plan first <span>→</span></a></div></td></tr>
                 </tbody>
             </table></div>
         </article>
         <aside class="dashboard-side">
-            <article class="welcome-card"><div class="welcome-card-top"><span class="welcome-art">✦</span><span class="tag tag-light">YOUR TEMPLATE ACCESS</span></div><h3>One plan.<br>Your included templates.</h3><p>Only active templates in your plan are available when creating an invoice.</p><div class="portal-template-list"><span class="tag tag-light" th:each="template : ${templates}" th:text="${template.name}">Classic</span></div><a th:href="@{/portal/plan}">View plan and templates <span>→</span></a><div class="welcome-orbit orbit-one"></div><div class="welcome-orbit orbit-two"></div></article>
-            <article class="panel people-panel"><div class="panel-heading"><div><span class="kicker">YOUR TOOLS</span><h2>Account data</h2></div></div>
-                <div class="people-list"><a class="person-row" th:href="@{/portal/products}"><span class="person-avatar">◇</span><span class="person-details"><strong>Products &amp; services</strong><small th:text="${stats.productCount + ' items'}">0 items</small></span><span class="person-arrow">→</span></a><a class="person-row" th:href="@{/portal/categories}"><span class="person-avatar">▧</span><span class="person-details"><strong>Categories</strong><small th:text="${stats.categoryCount + ' created'}">0 created</small></span><span class="person-arrow">→</span></a><a class="person-row" th:href="@{/portal/plan}"><span class="person-avatar">✳</span><span class="person-details"><strong>Plan &amp; templates</strong><small>Manage your subscription</small></span><span class="person-arrow">→</span></a><a class="person-row" th:href="@{/portal/templates}"><span class="person-avatar">▧</span><span class="person-details"><strong>Custom templates</strong><small>Design your invoices</small></span><span class="person-arrow">→</span></a><a class="person-row" th:href="@{/portal/company}"><span class="person-avatar">▣</span><span class="person-details"><strong>Company profile</strong><small>Update invoice identity and logo</small></span><span class="person-arrow">→</span></a></div>
+            <article class="panel"><div class="panel-heading"><div><span class="kicker">CATALOGUE ACTIVITY</span><h2>Products created or updated</h2></div><a class="text-link" th:href="@{/portal/products}">Manage <span>→</span></a></div>
+                <ol class="activity-list"><li th:each="row : ${dashboard.recentProducts}"><a th:href="@{/portal/products/{id}/edit(id=${row.id})}"><span class="activity-main"><strong th:text="${row.name}">Item</strong><small th:text="${row.detail}">SKU</small></span><span class="activity-meta"><span class="tag tag-light" th:text="${row.activity}">Created</span><small th:text="${row.changedOn != null ? #strings.replace(row.changedOn, 'T', ' ') : ''}">time</small></span></a></li>
+                    <li th:if="${#lists.isEmpty(dashboard.recentProducts)}"><span class="empty-inline">No products yet — add one and it appears here.</span></li></ol>
+            </article>
+            <article class="panel"><div class="panel-heading"><div><span class="kicker">CATALOGUE ACTIVITY</span><h2>Categories created or updated</h2></div><a class="text-link" th:href="@{/portal/categories}">Manage <span>→</span></a></div>
+                <ol class="activity-list"><li th:each="row : ${dashboard.recentCategories}"><a th:href="@{/portal/categories}"><span class="activity-main"><strong th:text="${row.name}">Category</strong><small th:text="${row.detail}">Description</small></span><span class="activity-meta"><span class="tag tag-light" th:text="${row.activity}">Created</span><small th:text="${row.changedOn != null ? #strings.replace(row.changedOn, 'T', ' ') : ''}">time</small></span></a></li>
+                    <li th:if="${#lists.isEmpty(dashboard.recentCategories)}"><span class="empty-inline">No category activity yet.</span></li></ol>
             </article>
         </aside>
     </section>
+
+    <section class="dashboard-grid">
+        <article class="panel"><div class="panel-heading"><div><span class="kicker">RECENT ACTIVITY</span><h2>Audit history</h2></div><a class="text-link" th:href="@{/portal/audit}">Full trail <span>→</span></a></div>
+            <ol class="activity-list"><li th:each="row : ${dashboard.recentActivity}"><a th:href="@{/portal/audit/{id}(id=${row.id})}"><span class="activity-main"><strong th:text="${row.action}">CREATE</strong><small th:text="${row.record}">Invoice created</small></span><span class="activity-meta"><span class="tag tag-light" th:if="${row.failure}">FAILED</span><small th:text="${row.actor}">user</small><small th:text="${#strings.replace(row.at, 'T', ' ')}">time</small></span></a></li>
+                <li th:if="${#lists.isEmpty(dashboard.recentActivity)}"><span class="empty-inline">No activity inside your viewing window yet.</span></li></ol>
+        </article>
+        <aside class="dashboard-side">
+            <article class="panel"><div class="panel-heading"><div><span class="kicker">QUICK ACTIONS</span><h2>Jump straight in</h2></div></div>
+                <div class="people-list">
+                    <a class="person-row" th:href="@{/portal/invoices/new}"><span class="person-avatar">▤</span><span class="person-details"><strong>Create invoice</strong><small>Preview, then issue</small></span><span class="person-arrow">→</span></a>
+                    <a class="person-row" th:href="@{/portal/products/new}"><span class="person-avatar">◇</span><span class="person-details"><strong>Add product</strong><small>Reuse it on every bill</small></span><span class="person-arrow">→</span></a>
+                    <a class="person-row" th:href="@{/portal/categories}"><span class="person-avatar">▧</span><span class="person-details"><strong>Add category</strong><small>Keep the catalogue tidy</small></span><span class="person-arrow">→</span></a>
+                    <a class="person-row" th:href="@{/portal/templates}"><span class="person-avatar">✎</span><span class="person-details"><strong>Manage templates</strong><small>Design your invoices</small></span><span class="person-arrow">→</span></a>
+                    <a class="person-row" th:href="@{/portal/plan}"><span class="person-avatar">◆</span><span class="person-details"><strong>View subscription</strong><small th:text="${dashboard.expiresOn != null ? 'Ends ' + dashboard.expiresOn : 'Choose or renew a plan'}">Plan</small></span><span class="person-arrow">→</span></a>
+                    <a class="person-row" th:href="@{/portal/audit}"><span class="person-avatar">⌕</span><span class="person-details"><strong>View audit history</strong><small>Your own records only</small></span><span class="person-arrow">→</span></a>
+                    <a class="person-row" th:href="@{/portal/company}"><span class="person-avatar">▣</span><span class="person-details"><strong>Update profile</strong><small>Details that print on invoices</small></span><span class="person-arrow">→</span></a>
+                    <a class="person-row" th:href="@{/portal/settings}"><span class="person-avatar">⚙</span><span class="person-details"><strong>Settings</strong><small>Defaults, alerts, history window</small></span><span class="person-arrow">→</span></a>
+                </div>
+            </article>
+            <article class="welcome-card"><div class="welcome-card-top"><span class="welcome-art">✦</span><span class="tag tag-light">YOUR TEMPLATE ACCESS</span></div><h3>One plan.<br>Your included templates.</h3><p>Only active templates in your plan are available when creating an invoice, and a customised copy never changes the system original.</p><a th:href="@{/portal/plan}">View plan and templates <span>→</span></a><div class="welcome-orbit orbit-one"></div><div class="welcome-orbit orbit-two"></div></article>
+        </aside>
+    </section>
+    </th:block>
+
     <footer class="page-footer"><span>Your account data is isolated from every other customer.</span><span th:text="${customer.email}">hello@company.com</span></footer>
 </div></main></div></body></html>
