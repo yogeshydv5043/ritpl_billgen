@@ -98,15 +98,19 @@ class AppInformationIntegrationTest {
         assertEquals(1, count("select count(*) from app_info"), "exactly one branding row is seeded");
         assertEquals("BillGen", jdbc.queryForObject("select site_name from app_info where id = 1", String.class),
                 "the seeded row is the branding the application already ships with");
-        assertEquals(11, count("select count(*) from notification_settings"),
+        assertEquals(6, count("select count(*) from notification_settings"),
                 "one row per event the application can actually produce");
+        assertEquals(java.util.List.of("CREDENTIAL_CHANGED", "INVOICE_LIMIT_REACHED", "INVOICE_LIMIT_WARNING",
+                        "PAYMENT_SUCCESS", "SUBSCRIPTION_EXPIRED", "SUBSCRIPTION_EXPIRY_WARNING"),
+                jdbc.queryForList("select notification_code from notification_settings order by notification_code",
+                        String.class),
+                "every notice in the table is one a job or a flow raises, and no notice that is raised is missing");
         for (String table : List.of("policy_pages", "reviews", "faq_types", "faqs")) {
             assertEquals(0, count("select count(*) from " + table + " where created_by = 'migration:v12'"),
                     "no " + table + " content is invented by a migration");
         }
-        assertEquals(1, count("select count(*) from notification_settings where notification_code = "
-                + "'PAYMENT_FAILED' and status = 'INACTIVE'"),
-                "a notice nothing raises exists but is switched off, and says why");
+        assertEquals(6, count("select count(*) from notification_settings where status = 'ACTIVE'"),
+                "each of them starts switched on, because each one is honoured by the application today");
     }
 
     @Test

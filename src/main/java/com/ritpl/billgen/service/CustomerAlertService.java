@@ -19,23 +19,33 @@ import com.ritpl.billgen.repository.SubscriptionNotificationLogRepository;
  * running out, a payment recorded on one of its invoices, and a change to its credentials.
  *
  * <p>These rows go into the same in-app inbox the subscription reminders use, so there is one place to
- * read them and one mark-read flow. Two rules keep this honest: a row is written only after the event
- * itself has been saved, and a topic the account has switched off writes nothing. The password-change
- * notice is the one case where the preference is ignored, because an account must not be able to hide a
- * credential change from itself - the audit entry for it exists either way.</p>
+ * read them and one mark-read flow. Three rules keep this honest: a row is written only after the event
+ * itself has been saved; a topic the account has switched off writes nothing; and whether a notice exists
+ * at all, and whether it is also emailed, is decided by {@code notification_settings} through
+ * {@link PlatformMailService} rather than being hardcoded here. The password-change notice is the one case
+ * where the account's own preference is ignored, because an account must not be able to hide a credential
+ * change from itself - the setting still decides whether an email goes out alongside it.</p>
  */
 @Service
 public class CustomerAlertService {
+    /** The {@code notification_settings} code for each notice this service can produce. */
+    static final String QUOTA_WARNING = "INVOICE_LIMIT_WARNING";
+    static final String QUOTA_EXHAUSTED = "INVOICE_LIMIT_REACHED";
+    static final String PAYMENT = "PAYMENT_SUCCESS";
+    static final String CREDENTIALS = "CREDENTIAL_CHANGED";
+
     private final SubscriptionNotificationLogRepository notifications;
     private final CustomerRepository customers;
     private final InvoiceRepository invoices;
     private final CustomerSettingsService settings;
     private final AuditService audit;
+    private final PlatformMailService mail;
 
     public CustomerAlertService(SubscriptionNotificationLogRepository notifications, CustomerRepository customers,
-            InvoiceRepository invoices, CustomerSettingsService settings, AuditService audit) {
+            InvoiceRepository invoices, CustomerSettingsService settings, AuditService audit,
+            PlatformMailService mail) {
         this.notifications = notifications; this.customers = customers; this.invoices = invoices;
-        this.settings = settings; this.audit = audit;
+        this.settings = settings; this.audit = audit; this.mail = mail;
     }
 
     /**
@@ -63,7 +73,9 @@ public class CustomerAlertService {
                         + " invoices). New invoices will be refused until the plan is renewed; cancelling an issued invoice does not return its slot."
                 : "Only " + remaining + " of your " + limit + " invoices remain for this term ("
                         + term.getPlan().getName() + ", runs to " + term.getEndsOn() + ").";
-        save(customerId, term, "QUOTA", (int) Math.min(Integer.MAX_VALUE, remaining), message, true);
+        save(customerId, term, "QUOTA", (int) Math.min(Integer.MAX_VALUE, remaining), message, true,
+                remaining == 0 ? QUOTA_EXHAUSTED : QUOTA_WARNING,
+                "term-" + term.getId() + "-" + remaining, false, "Invoice allowance for this term");
     }
 
     /** A payment notice for the account whose invoice was recorded as paid. */
@@ -76,7 +88,8 @@ public class CustomerAlertService {
         String message = "Payment recorded on invoice " + invoice.getInvoiceNumber() + " for "
                 + invoice.getCurrency() + " " + invoice.getTotalAmount() + ".";
         // No dedupe key: every invoice that gets paid deserves its own notice.
-        save(customerId, invoice.getUsageSubscription(), "PAYMENT", 0, message, false);
+        save(customerId, invoice.getUsageSubscription(), "PAYMENT", 0, message, false, PAYMENT,
+                "invoice-" + invoice.getId(), false, "Payment recorded");
     }
 
     /**
@@ -86,27 +99,50 @@ public class CustomerAlertService {
     @Transactional
     @CacheEvict(cacheNames = "dashboard", allEntries = true)
     public void securityAlert(long customerId, String message) {
-        save(customerId, null, "SECURITY", 0, message, false);
+        // forceInApp: the account's own preference and the global notice setting may switch an email off,
+        // but a credential change always stays visible in the inbox it happened to.
+        save(customerId, null, "SECURITY", 0, message, false, CREDENTIALS,
+                "security-" + customerId + "-" + System.currentTimeMillis(), true, "Account credentials changed");
     }
 
     /**
-     * {@code dedupeKey} is the value that makes a repeat unnecessary for this topic - the remaining
-     * invoice count for a quota notice - and {@code deduplicate} is whether it is consulted at all.
+     * Writes the notice, then asks for its email half. {@code dedupeKey} is the value that makes a repeat
+     * unnecessary for this topic - the remaining invoice count for a quota notice - and {@code deduplicate}
+     * is whether it is consulted at all; {@code eventKey} is what the email's idempotency key is built from,
+     * because "one notice per level crossed" and "one email per event" are different questions.
+     *
+     * <p>A muted notice returns before either half is written, so switching one off leaves no row behind
+     * claiming something was sent, and a notice the account has opted out of never reaches the transport.</p>
      */
     private void save(long customerId, CustomerSubscription term, String type, int dedupeKey, String message,
-            boolean deduplicate) {
+            boolean deduplicate, String notificationCode, String eventKey, boolean forceInApp, String subject) {
+        if (mail.muted(notificationCode)) return;
         Customer customer = customers.findById(customerId).orElse(null);
         if (customer == null) return;
-        if (deduplicate && term != null && term.getId() != null
-                && notifications.existsBySubscription_IdAndNotificationTypeAndDaysBefore(term.getId(), type, dedupeKey)) {
-            return;
+        boolean writtenToInbox = false;
+        if (forceInApp || mail.deliversInApp(notificationCode)) {
+            if (deduplicate && term != null && term.getId() != null
+                    && notifications.existsBySubscription_IdAndNotificationTypeAndDaysBefore(term.getId(), type, dedupeKey)) {
+                return;
+            }
+            SubscriptionNotificationLog notification = term == null
+                    ? new SubscriptionNotificationLog(customer, type, dedupeKey, message)
+                    : new SubscriptionNotificationLog(term, type, dedupeKey, message);
+            notification.setStatus(NotificationStatus.DELIVERED);
+            notifications.save(notification);
+            audit.record(AuditEventCommand.success(customerId, "NOTIFY", "ACCOUNT", "Account alert",
+                    notification.getId(), "In-app account alert created (" + type + ").", null,
+                    Map.of("topic", type, "message", message)).withActor("SYSTEM"));
+            writtenToInbox = true;
         }
-        SubscriptionNotificationLog notification = term == null
-                ? new SubscriptionNotificationLog(customer, type, dedupeKey, message)
-                : new SubscriptionNotificationLog(term, type, dedupeKey, message);
-        notification.setStatus(NotificationStatus.DELIVERED);
-        notifications.save(notification);
-        audit.record(AuditEventCommand.success(customerId, "NOTIFY", "ACCOUNT", "Account alert", notification.getId(),
-                "In-app account alert created.", null, Map.of("topic", type, "message", message)).withActor("SYSTEM"));
+        // The email half guards itself against a repeat by the event key, which is what lets an email-only
+        // notice (in-app switched off, or a notice with no inbox row at all) be retried safely.
+        mail.email(notificationCode, customer, subject, message, notificationCode + ":" + eventKey);
+        if (!writtenToInbox) {
+            audit.record(AuditEventCommand.success(customerId, "NOTIFY", "ACCOUNT", "Account alert", null,
+                    "Account alert recorded for the " + type + " topic without an inbox entry, because "
+                            + "the notice is configured for email only.", null,
+                    Map.of("topic", type)).withActor("SYSTEM"));
+        }
     }
 }

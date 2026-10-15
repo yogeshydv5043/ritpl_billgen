@@ -151,31 +151,27 @@ SELECT seed.code, seed.name, seed.description, seed.email, seed.in_app, seed.day
        'migration:v12', 'migration:v12'
   FROM (VALUES
         ('SUBSCRIPTION_EXPIRY_WARNING', 'Subscription expiry warning',
-         'Sent before a term ends so invoicing does not stop by accident.', TRUE, TRUE, 7, 4, 'ACTIVE'),
+         'Reminds the account before its term ends. Reminders start this many days early and repeat at the '
+         'interval until one day remains, so a seven day notice with a four day interval warns at seven, '
+         'three and one day.', TRUE, TRUE, 7, 4, 'ACTIVE'),
         ('SUBSCRIPTION_EXPIRED', 'Subscription expired',
-         'Sent when a term has ended and the account loses template access.', TRUE, TRUE, 0, 0, 'ACTIVE'),
+         'Records that a term has ended and the account has lost template access.', TRUE, TRUE, 0, 0, 'ACTIVE'),
         ('INVOICE_LIMIT_WARNING', 'Invoice allowance approaching its limit',
-         'Sent when the period allowance reaches the warning threshold.', FALSE, TRUE, 0, 0, 'ACTIVE'),
+         'Raised when the term allowance reaches the plan''s warning threshold.', FALSE, TRUE, 0, 0, 'ACTIVE'),
         ('INVOICE_LIMIT_REACHED', 'Invoice allowance exhausted',
-         'Sent when no further invoice can be issued in this period.', FALSE, TRUE, 0, 0, 'ACTIVE'),
+         'Raised when no further invoice can be issued in this period.', FALSE, TRUE, 0, 0, 'ACTIVE'),
         ('PAYMENT_SUCCESS', 'Payment recorded',
-         'Sent when a payment is recorded against an invoice.', FALSE, TRUE, 0, 0, 'ACTIVE'),
-        ('PAYMENT_FAILED', 'Payment failed',
-         'Needs a payment gateway; the application records payments manually, so nothing raises it.',
-         FALSE, FALSE, 0, 0, 'INACTIVE'),
-        ('WELCOME_EMAIL', 'Welcome email',
-         'Not sent by this build: an account is activated by choosing a plan, not by email confirmation.',
-         FALSE, FALSE, 0, 0, 'INACTIVE'),
-        ('PLAN_CHANGED', 'Plan changed',
-         'Sent when an administrator assigns a different plan to the account.', TRUE, TRUE, 0, 0, 'ACTIVE'),
-        ('ACCOUNT_STATUS_CHANGE', 'Account enabled or disabled',
-         'Sent when sign-in is switched on or off for the account.', TRUE, TRUE, 0, 0, 'ACTIVE'),
-        ('AUDIT_LIMIT_WARNING', 'Audit history window exceeded',
-         'Sent when an account reaches the audit activity its plan allows.', FALSE, TRUE, 0, 0, 'ACTIVE'),
-        ('JOB_FAILED', 'Background job failed',
-         'Sent to administrators when a scheduled batch ended in failure.', TRUE, FALSE, 0, 0, 'ACTIVE')
+         'Raised for the account whose invoice was recorded as paid.', FALSE, TRUE, 0, 0, 'ACTIVE'),
+        ('CREDENTIAL_CHANGED', 'Password or credentials changed',
+         'In-app delivery of this notice is forced - an account must not be able to hide a credential change '
+         'from itself - and this row decides only whether an email is sent as well.', TRUE, TRUE, 0, 0, 'ACTIVE')
        ) AS seed(code, name, description, email, in_app, days, repeat, status)
  WHERE NOT EXISTS (SELECT 1 FROM notification_settings);
+
+-- Six codes, and every one of them is raised by the application today. Codes for events this build cannot
+-- produce (a payment gateway failing, a welcome email, an audit-window notice) are deliberately absent:
+-- a switch that nothing honours is worse than no switch, and the table is extended by migration when the
+-- event exists rather than by an editor that would accept any code a person can type.
 
 -- The one piece of branding the application needs before an administrator has opened the screen: the
 -- name and the footer line the sign-in page already prints. Everything else starts empty, so a blank

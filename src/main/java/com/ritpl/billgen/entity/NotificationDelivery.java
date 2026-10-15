@@ -70,6 +70,15 @@ public class NotificationDelivery {
     public String getFailureReason() { return failureReason; }
     public Long getJobId() { return jobId; }
     public void setJobId(Long v) { jobId = v; }
+
+    /**
+     * Names the notice this delivery belongs to when it was produced by the platform rather than by a
+     * message an administrator wrote - the history still has to say which notice it is showing.
+     */
+    public void describeSource(String name, String code) {
+        if (name != null && !name.isBlank()) this.notificationName = name.length() > 120 ? name.substring(0, 120) : name;
+        if (code != null && !code.isBlank()) this.triggerEvent = code.length() > 48 ? code.substring(0, 48) : code;
+    }
     public String getIdempotencyKey() { return idempotencyKey; }
     public Instant getSentAt() { return sentAt; }
     public Instant getCreatedAt() { return createdAt; }
