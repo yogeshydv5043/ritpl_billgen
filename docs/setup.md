@@ -106,4 +106,4 @@ At the `psql` prompt, enter `\password billgen`, set the password to the same va
 
 Changing `.env` alone does not change a PostgreSQL role in a database initialized earlier. Avoid `docker compose down -v` as a password fix because it deletes the database volume.
 
-The `sun.misc.Unsafe` warning is separate from SQL state `28P01` and does not stop startup. Netty 4.1 can emit it on Java 24+; this project targets Java 17+, so use JDK 17 if you want to avoid that newer-JDK warning while staying on the project's baseline. Check both `java -version` and `mvn -version` to see which JDK Maven is using.
+The `sun.misc.Unsafe` warning is separate from SQL state `28P01` and does not stop startup. Netty 4.1 can emit it on Java 24+; this project targets Java 21, which is below that, so no workaround is needed. Check both `java -version` and `mvn -version` to see which JDK Maven is using.

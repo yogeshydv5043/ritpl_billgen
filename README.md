@@ -1,6 +1,6 @@
 # BillGen
 
-BillGen is a multi-tenant billing and invoice workspace built with Java 17, Spring Boot, PostgreSQL, Redis, Spring Security and Thymeleaf. It includes tenant-isolated customer workspaces, company profiles and logo snapshots, products and categories, plan/template entitlements and quotas, server-calculated invoices and discounts, subscription expiry reminders, protected audit trails, scoped Excel exports, an authenticated REST API, a Spring Cloud API gateway, and an Nginx reverse proxy/load balancer.
+BillGen is a multi-tenant billing and invoice workspace built with Java 21, Spring Boot, PostgreSQL, Redis, Spring Security and Thymeleaf. It includes tenant-isolated customer workspaces, company profiles and logo snapshots, products and categories, plan/template entitlements and quotas, server-calculated invoices and discounts, subscription expiry reminders, protected audit trails, scoped Excel exports, an authenticated REST API, a Spring Cloud API gateway, and an Nginx reverse proxy/load balancer.
 
 > **Project status:** the application has exactly two roles: Admin (`ADMIN`) and Customer (`CUSTOMER`). Customers can activate an available plan from their portal, or an Admin can assign a plan. Activation is immediate; payment checkout and outbound email delivery are not included. Invoices are downloadable as server-generated PDFs and also have a browser print view.
 
@@ -39,7 +39,7 @@ docker compose down
 
 ## Run the application without Docker
 
-Requirements: JDK 17+, Maven 3.9+, PostgreSQL and Redis.
+Requirements: JDK 21+, Maven 3.9+, PostgreSQL and Redis.
 
 1. Create a PostgreSQL database/user and start Redis.
 2. Copy `.env.example` to `.env`. Spring Boot reads that local file when run from the project directory; by default it expects PostgreSQL user `billgen` with password `billgen_dev_only`. Set `POSTGRES_PASSWORD` in `.env` to the password already assigned to your local `billgen` role, or set `SPRING_DATASOURCE_PASSWORD` in your shell to override it.
@@ -122,7 +122,7 @@ For the full multi-service stack (Nginx, gateway, two app instances, PostgreSQL,
 
 ### Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request. It provisions JDK 17 (Temurin) and a PostgreSQL 16 service container, then runs:
+`.github/workflows/ci.yml` runs on every push and pull request. It provisions JDK 21 (Temurin) and a PostgreSQL 16 service container, then runs:
 
 ```bash
 mvn -B -ntp -DskipTests compile
