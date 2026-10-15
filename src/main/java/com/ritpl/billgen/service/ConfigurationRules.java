@@ -53,7 +53,7 @@ final class ConfigurationRules {
         String trimmed = optional(value, max, label);
         if (trimmed == null) return null;
         int at = trimmed.indexOf('@');
-        if (at < 1 || !trimmed.contains(".", at)) {
+        if (at < 1 || trimmed.indexOf('.', at) < 0) {
             throw new IllegalArgumentException(label + " must be a valid email address.");
         }
         return trimmed;
