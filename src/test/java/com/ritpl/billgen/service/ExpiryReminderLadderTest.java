@@ -37,7 +37,7 @@ class ExpiryReminderLadderTest {
     @Test
     void aLeadTimeOfZeroMeansTheExpiryNoticeAndNothingBeforeIt() {
         assertEquals(0, SubscriptionExpiryNotificationService.reminderOffsets(setting(0, 0)).length,
-                "zero means "when it happens", which is the expiry notice's own job");
+                "a lead time of zero means the expiry notice decides, and nothing is warned earlier");
     }
 
     @Test
