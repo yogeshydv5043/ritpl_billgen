@@ -89,5 +89,9 @@ class RichTextSanitizerTest {
         assertEquals("<p>a<br>b</p>", RichTextSanitizer.sanitize("<p>a<br>b</p>"));
         assertEquals("<p>a<br>b</p>", RichTextSanitizer.sanitize("<p>a<br/>b</p>"));
         assertEquals("<p>a<br>b</p>", RichTextSanitizer.sanitize("<p>a<br />b</p>"));
+        assertEquals("<p>a &lt; b</p>", RichTextSanitizer.sanitize("<p>a < b</p>"),
+                "a less-than in a sentence stays text rather than starting a tag");
+        assertFalse(RichTextSanitizer.sanitize("<p>a<script/>b</p>").contains("script"),
+                "a self-closing dangerous tag is still a dangerous tag");
     }
 }

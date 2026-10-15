@@ -57,8 +57,11 @@ class EmailSettingsServiceTest {
     @Test
     void anIncompleteTransportCannotBeActivatedAndSaysWhatIsMissing() {
         when(store.findById(anyLong())).thenReturn(Optional.empty());
+        when(store.save(any(EmailSetting.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        // Built here rather than through service(...), which re-stubs the read to return the complete row.
+        EmailSettingsService svc = new EmailSettingsService(store, new SecretCipher("test-key"), audit);
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> service(new SecretCipher("test-key")).save(ADMIN, new EmailSettingsCommand(null, null, null,
+                () -> svc.save(ADMIN, new EmailSettingsCommand(null, null, null,
                         null, false, EmailSecurityProtocol.NONE, null, "RIT Payments", null, null,
                         ContentStatus.ACTIVE)));
         assertTrue(refused.getMessage().contains("from address"), refused.getMessage());

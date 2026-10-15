@@ -45,6 +45,10 @@ public final class RichTextSanitizer {
             String raw = html.substring(i + 1, close).trim();
             boolean isClosing = raw.startsWith("/");
             String body = isClosing ? raw.substring(1).trim() : raw;
+            // "<br/>" has no space before the slash, so the marker is taken off the name rather than
+            // leaving a name that is not a name - which would have turned the tag into visible text.
+            boolean selfClosing = !isClosing && body.endsWith("/");
+            if (selfClosing) body = body.substring(0, body.length() - 1).trim();
             int space = body.indexOf(' ');
             String tag = (space < 0 ? body : body.substring(0, space)).toLowerCase(Locale.ROOT).trim();
             // A name that is not a name at all ("<!", "<?>", "3div") is somebody writing less-than in a
@@ -70,7 +74,7 @@ public final class RichTextSanitizer {
             }
             if (isClosing) {
                 out.append("</").append(tag).append(">");
-            } else if (VOID.contains(tag) || raw.endsWith("/")) {
+            } else if (VOID.contains(tag) || selfClosing) {
                 out.append('<').append(tag).append(">");
             } else {
                 String href = tag.equals("a") ? safeHref(body) : null;
