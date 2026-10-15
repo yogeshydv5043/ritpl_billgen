@@ -182,6 +182,62 @@ Returns invoice, product and category counts, total billed, login details and su
 
 Admin receives customer-wise statistics for every visible account. Customer receives only its own row.
 
+## Site configuration (App Information)
+
+These routes sit outside `/api/v1`: the administrator's half under `/api/admin/app-information`, the
+public half under `/api/public`. The administrator's routes use the same HTTP Basic credential as the rest
+of the API and refuse a customer's credential with `403` - these rows describe the product itself, so they
+are not scoped to a tenant. `GET /api/public/app-information` needs no credential at all and returns only
+what a public page already shows.
+
+### `GET` and `PUT /api/admin/app-information/app-info`
+
+Branding, support contacts, social links and footer text - one row for the whole application. `PUT`
+accepts the same fields; a colour must be a `#rrggbb` hex value and a link must start with `http://` or
+`https://`. Reading it before anything has been saved returns the branding the build ships with, marked
+`"configured": false`.
+
+### `/api/admin/app-information/policies[/{type}]`
+
+`GET` the list or one document, `PUT` to save it, `PUT /{type}/status` with `{"status":"ACTIVE"}` to
+publish or `"INACTIVE"` to withdraw. `{type}` is `REFUND`, `PRIVACY` or `TERMS_CONDITIONS`; each type has
+exactly one row, revised in place rather than versioned. `pageContent` is HTML: it is reduced to the tags a
+policy is written with (`p`, `br`, `ul`, `ol`, `li`, `strong`, `b`, `em`, `i`, `h2`-`h4`, `blockquote` and
+`a` with an `http(s)`, `mailto` or in-document `href`); every other tag and attribute is removed on the way
+in, so what the API stored is what a visitor's browser may render.
+
+### `/api/admin/app-information/reviews[/{id}]`
+
+`GET` (paged, `search`, `status`, `minRating`), `POST`, `PUT`, `DELETE`, plus
+`PUT /{id}/status` and `POST /{id}/restore`. `rating` is an integer 1-5. `DELETE` removes a review from the
+public page and the administrator's list without erasing the row, which is why the list can show what was
+published before it was taken down.
+
+### `/api/admin/app-information/faq-types[/{id}]` and `/faqs[/{id}]`
+
+FAQ types carry a unique lower-case `typeCode` used by public links; leave it blank on `POST` and it is
+derived from the name. A type with questions in it cannot be deleted - the response says how many are still
+inside. FAQs are `PUT` with their `faqTypeId`, and a question only appears publicly while both it and its
+type are published.
+
+### `/api/admin/app-information/email-settings`
+
+`GET` returns the transport without the password: `passwordSet`, a `passwordHint`, and `transportSummary`
+saying whether the application will actually send. `PUT` accepts `password`; a blank or absent value keeps
+the stored credential, and the stored value is encrypted with `APP_SECRETS_ENCRYPTION_KEY`, so a
+deployment without that key is told it cannot save one rather than having it written in plain text.
+`POST /email-settings/test` with `{"recipient":"you@example.com"}` sends one real message and returns
+`{"sent":true|false,"message":"..."}` - the message explains a refusal in a sentence, never as a stack
+trace, and never repeats a credential.
+
+### `/api/admin/app-information/notification-settings[/{code}]`
+
+`GET` lists the notices the platform can produce (the codes are fixed by the application), `PUT /{code}`
+edits name, description, `triggerDaysBefore`, `repeatIntervalDays`, the two channels and the status, and
+`PUT /{code}/status` switches one off without losing its configuration. `triggerDaysBefore: 0` means "when
+it happens"; `repeatIntervalDays: 0` means "once while the condition lasts". An unknown code is a `400`,
+not a new row.
+
 ## Errors
 
 - `400 Bad Request`: invalid data, an unavailable template, or a template not included in the active plan.

@@ -79,6 +79,12 @@ app:
     deletion:
       # false = outstanding SENT invoices do not block a soft delete (the reason is still required).
       block-outstanding-invoices: ${APP_CUSTOMERS_BLOCK_OUTSTANDING_DELETION:true}
+  secrets:
+    # Seals the SMTP password an administrator stores in the email settings. Generate one per
+    # environment (`openssl rand -hex 32`) and keep it out of the repository. With no key the
+    # application still runs, the settings screen says the password cannot be stored, and nothing is
+    # ever written in plain text.
+    encryption-key: ${APP_SECRETS_ENCRYPTION_KEY:}
   mail:
     from: ${APP_MAIL_FROM:no-reply@billgen.local}
   subscription:

@@ -26,7 +26,12 @@ public class SecurityConfig {
     @Order(1)
     SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
         http.securityMatcher("/api/**")
-            .authorizeHttpRequests(auth -> auth.anyRequest().hasAnyRole("ADMIN", "CUSTOMER"))
+            // The only unauthenticated door is the one that reads what the public pages already show:
+            // branding and support details, no tenant data and no secrets. Every other /api route needs
+            // a credential, and the services then derive a TenantScope from it.
+            .authorizeHttpRequests(auth -> auth
+                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/public/**").permitAll()
+                    .anyRequest().hasAnyRole("ADMIN", "CUSTOMER"))
             .httpBasic(Customizer.withDefaults())
             .csrf(csrf -> csrf.disable())
             .exceptionHandling(errors -> errors

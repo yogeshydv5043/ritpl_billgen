@@ -40,6 +40,7 @@ The named volumes `postgres-data` and `redis-data` persist between container res
 | `BOOTSTRAP_ADMIN_PASSWORD` | blank | Password for the bootstrap Admin; set with the email. |
 | `SESSION_COOKIE_SECURE` | `false` in dev | Mark session cookies Secure. Set true when serving over HTTPS. |
 | `DB_POOL_SIZE` | `6` in Compose | Per-instance Hikari maximum pool size. |
+| `APP_SECRETS_ENCRYPTION_KEY` | blank | Encrypts the SMTP password an administrator stores in Email settings. Generate one per environment with `openssl rand -hex 32`. With no key the application runs and says so on that screen, but a mail password cannot be saved - it is never written in plain text. Changing the key makes a previously stored password unreadable, so enter the password again after rotating it. |
 
 The complete local example is [.env.example](../.env.example). Spring Boot optionally imports `.env` as properties when launched from the project directory, so the same `POSTGRES_PASSWORD` can configure a local Maven run; Compose also reads it. A real `.env` is git-ignored and excluded from the Docker build context and project ZIP.
 
@@ -48,6 +49,7 @@ The complete local example is [.env.example](../.env.example). Spring Boot optio
 - Use `SPRING_PROFILES_ACTIVE=prod` and `APP_DEMO_SEED_ENABLED=false`.
 - Set strong, unique PostgreSQL and Redis passwords; configure secrets through the deployment platform, not a committed file.
 - Set both `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` for initial provisioning; rotate/remove the bootstrap secret after use.
+- Set `APP_SECRETS_ENCRYPTION_KEY` before using the mail settings screen, and treat it like the database password: it is the only thing standing between a stolen backup and a usable SMTP credential.
 - Set `SESSION_COOKIE_SECURE=true`; expose BillGen only over HTTPS through a trusted reverse proxy.
 - Keep PostgreSQL, Redis, both application instances and the gateway on a private network. Only the ingress/Nginx entry point should be public.
 - Restrict actuator access, configure logs/metrics and backups, and review retention/data-protection requirements before handling customer data.
