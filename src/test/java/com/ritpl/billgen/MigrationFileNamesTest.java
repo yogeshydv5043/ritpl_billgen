@@ -47,7 +47,7 @@ class MigrationFileNamesTest {
 
     @Test
     void noMigrationIsNamedAfterSomethingAlreadyApplied() throws IOException {
-        List<String> descriptions = files().stream().map(name -> name.substring(name.indexOf('__') + 2))
+        List<String> descriptions = files().stream().map(name -> name.substring(name.indexOf("__") + 2))
                 .toList();
         assertEquals(new java.util.HashSet<>(descriptions).size(), descriptions.size(),
                 "two files describing the same change in different words is how the same table ends up "
