@@ -109,3 +109,47 @@ At the `psql` prompt, enter `\password billgen`, set the password to the same va
 Changing `.env` alone does not change a PostgreSQL role in a database initialized earlier. Avoid `docker compose down -v` as a password fix because it deletes the database volume.
 
 The `sun.misc.Unsafe` warning is separate from SQL state `28P01` and does not stop startup. Netty 4.1 can emit it on Java 24+; this project targets Java 21, which is below that, so no workaround is needed. Check both `java -version` and `mvn -version` to see which JDK Maven is using.
+
+## Troubleshooting: startup stops with `jpaSharedEM_entityManagerFactory`
+
+If the application stops shortly after the Flyway line that prints the JDBC URL, and the first error reads like
+
+```
+Error creating bean with name 'accountStatusFilter' ... Unsatisfied dependency expressed through constructor
+parameter 0: ... Cannot resolve reference to bean 'jpaSharedEM_entityManagerFactory'
+```
+
+then the bean named there is not the problem. The shared `EntityManager` is resolved from the
+`entityManagerFactory` bean, so when that one fails to build, every JPA repository, and then the filters
+that use them, report an unsatisfied dependency. The cause is above this in the log - look for the first
+`APPLICATION FAILED TO START` or `Caused by:` block:
+
+```powershell
+mvn spring-boot:run 2>&1 | Select-String -Pattern "Caused by","Migr","Validation","Schema" -Context 0,2
+```
+
+```bash
+mvn spring-boot:run 2>&1 | grep -E -A2 "Caused by|Successfully validated|Successfully applied|Schema-validation|Checksum mismatch"
+```
+
+Two causes are possible in this project, and both are read from the same table:
+
+```sql
+select installed_rank, version, description, success, checksum from flyway_schema_history order by installed_rank;
+```
+
+- **`Migration checksum mismatch for version N`.** The SQL file behind a version that this database already
+  applied has changed underneath it - usually a pulled branch whose migration was edited rather than
+  extended. The fix belongs in the repository (an append-only `V(n+1)`, as `V13__notification_settings_prune_inert_codes.sql`
+  is for `V12`). To get a development database moving again while that lands, run Flyway once without
+  checksum validation - `SPRING_FLYWAY_VALIDATE_ON_MIGRATE=false mvn spring-boot:run` - which applies the
+  pending versions and leaves the data alone. Do not use it to get past a mismatch on a shared or production
+  database: there the file that changed is the defect.
+- **`Schema-validation: missing column ... in table ...`.** The entities and the DDL disagree, which means a
+  migration is missing from this database (`version` will stop short of the one you expect) or the mapping is
+  wrong. Re-pull and restart so the pending migration applies; do not set `spring.jpa.hibernate.ddl-auto` to
+  `update` or `none` to hide it - `validate` is what keeps `@Column` definitions and the schema honest.
+
+A local database that is simply behind can be rebuilt from scratch instead. For the Compose stack,
+`docker compose down -v && docker compose up -d` recreates an empty schema and every migration reapplies;
+this deletes all local data, so keep it to development.
