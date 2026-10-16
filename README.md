@@ -42,7 +42,15 @@ docker compose down
 Requirements: JDK 21+, Maven 3.9+, PostgreSQL and Redis.
 
 1. Create a PostgreSQL database/user and start Redis.
-2. Copy `.env.example` to `.env`. Spring Boot reads that local file when run from the project directory; by default it expects PostgreSQL user `billgen` with password `billgen_dev_only`. Set `POSTGRES_PASSWORD` in `.env` to the password already assigned to your local `billgen` role, or set `SPRING_DATASOURCE_PASSWORD` in your shell to override it.
+2. Point the application at your database. The development configuration opens
+   `jdbc:postgresql://localhost:5432/billgen` as the PostgreSQL superuser `postgres` with password
+   `postgres`, which is what a freshly installed local cluster already answers to, so no role has to be
+   created. If that role's password is different, name your own pair - `DB_USER` and `DB_PASSWORD` in the
+   shell - and a database called something else is set with `POSTGRES_DB` or a whole
+   `SPRING_DATASOURCE_URL`. Copy `.env.example` to `.env` only for the Docker Compose stack: Spring Boot
+   also reads that file for a local run, and its `POSTGRES_USER` / `POSTGRES_PASSWORD` (a least-privilege
+   `billgen` role the Compose container creates for itself) outrank the superuser fallback except where
+   `DB_USER` / `DB_PASSWORD` override them.
 3. Activate the dev profile and run the web application:
 
    ```bash
@@ -52,7 +60,7 @@ Requirements: JDK 21+, Maven 3.9+, PostgreSQL and Redis.
 
 4. Open <http://localhost:8080>.
 
-The development profile defaults to `jdbc:postgresql://localhost:5432/billgen`, PostgreSQL user `billgen` / password `billgen_dev_only`, Redis at `localhost:6379`, and demo seeding enabled. Override these with matching PostgreSQL role credentials if your local database was initialized differently. If startup reports SQL state `28P01`, follow the [database authentication troubleshooting steps](docs/setup.md#troubleshooting-postgresql-password-authentication) to align the app setting and role password. Flyway applies schema migrations on first startup. Hibernate validates the schema; it does not create or update tables.
+The development configuration defaults to `jdbc:postgresql://localhost:5432/billgen`, PostgreSQL user `postgres` / password `postgres`, Redis at `localhost:6379`, and demo seeding enabled. Precedence runs `SPRING_DATASOURCE_*`, then `DB_USER` / `DB_PASSWORD`, then `POSTGRES_*` from an inherited `.env`, then those local defaults - `DatabaseCredentialConfigurationTest` pins that order and asserts the production profile keeps no fallback at all. Create the database itself once: `createdb -h localhost -U postgres billgen`. If startup reports SQL state `28P01`, follow the [database authentication troubleshooting steps](docs/setup.md#troubleshooting-postgresql-password-authentication) to align the app setting and role password. Flyway applies schema migrations on first startup. Hibernate validates the schema; it does not create or update tables.
 
 To run the gateway separately, build and start the `gateway/` Maven project after starting BillGen. Set `BILLGEN_A_URI` and `BILLGEN_B_URI` to reachable application instances. For the complete reverse-proxy/load-balancer setup, use Docker Compose.
 

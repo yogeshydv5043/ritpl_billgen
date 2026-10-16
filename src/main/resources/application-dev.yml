@@ -1,8 +1,17 @@
 spring:
   datasource:
+    # Local development only, and local only in the sense of a database on this machine: the database
+    # name (billgen) and port (5432) are unchanged, so an existing development database is still the
+    # one being opened. The role defaults to the installer superuser because that is the only role a
+    # fresh PostgreSQL install is guaranteed to have, and every part of it stays overridable -
+    # SPRING_DATASOURCE_* for the app, POSTGRES_* for the Compose stack that creates its own
+    # least-privilege role, DB_USER / DB_PASSWORD for a developer who just wants to name the pair.
+    # DB_USER and DB_PASSWORD outrank the POSTGRES_* values an inherited .env carries, because those
+    # describe the container that creates its own role: half-reading them is how a local run ends up
+    # authenticating as a role nobody intended with a password that does not belong to it.
     url: "${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/${POSTGRES_DB:billgen}}"
-    username: ${SPRING_DATASOURCE_USERNAME:${POSTGRES_USER:billgen}}
-    password: ${SPRING_DATASOURCE_PASSWORD:${POSTGRES_PASSWORD:billgen_dev_only}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:${POSTGRES_USER:postgres}}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:${POSTGRES_PASSWORD:postgres}}}
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:5}
   jpa:

@@ -4,9 +4,15 @@ spring:
   application:
     name: billgen
   datasource:
+    # Fallbacks here are development fallbacks, and they match application-dev.yml deliberately: a
+    # default that only appeared once somebody remembered to activate a profile was a default nobody
+    # could rely on. The prod profile carries no fallback at all, so nothing local reaches a
+    # deployment. See DatabaseCredentialConfigurationTest for the resolution order this comment
+    # depends on. DB_USER / DB_PASSWORD outrank the POSTGRES_* pair a .env may still carry from the
+    # Compose setup, so naming local credentials is never silently half-applied.
     url: "${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/${POSTGRES_DB:billgen}}"
-    username: ${SPRING_DATASOURCE_USERNAME:${POSTGRES_USER:billgen}}
-    password: ${SPRING_DATASOURCE_PASSWORD:${POSTGRES_PASSWORD:billgen_dev_only}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:${POSTGRES_USER:postgres}}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:${POSTGRES_PASSWORD:postgres}}}
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:12}
       minimum-idle: 2

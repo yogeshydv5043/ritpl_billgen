@@ -29,9 +29,12 @@ The named volumes `postgres-data` and `redis-data` persist between container res
 |---|---|---|
 | `SPRING_PROFILES_ACTIVE` | `dev` in Compose | Selects `dev` or `prod` configuration. |
 | `HTTP_PORT` | `8080` | Host port exposed by Nginx. |
-| `POSTGRES_DB` | `billgen` | PostgreSQL database name. |
-| `POSTGRES_USER` | `billgen` | PostgreSQL application user. |
-| `POSTGRES_PASSWORD` | local-only `billgen_dev_only` | PostgreSQL password. The dev profile uses this as a fallback when `SPRING_DATASOURCE_PASSWORD` is not set; use a unique secret outside local development. |
+| `POSTGRES_DB` | `billgen` | PostgreSQL database name. The Compose container creates that database, and a local run assembles its JDBC URL from it. |
+| `POSTGRES_USER` | `billgen` | PostgreSQL role the **Compose** container creates for the application, and the credentials a local run picks up from an inherited `.env`. A run that names neither uses the local superuser instead - see `DB_USER`. |
+| `POSTGRES_PASSWORD` | local-only `billgen_dev_only` | Password for the role above, shared by the container and the app inside Compose. A local run reads it from `.env` unless `DB_PASSWORD` is set. Use a unique secret outside local development. |
+| `DB_USER` | `postgres` (development profiles) | The role a local `mvn spring-boot:run` connects as, when no `SPRING_DATASOURCE_USERNAME` and no `.env` role is set. Overrides `POSTGRES_USER`. |
+| `DB_PASSWORD` | `postgres` (development profiles) | The password for that role. Overrides `POSTGRES_PASSWORD`, and yields to `SPRING_DATASOURCE_PASSWORD`. Set it instead of changing the local superuser's password. |
+| `SPRING_DATASOURCE_URL` / `_USERNAME` / `_PASSWORD` | Compose sets all three | The application's own datasource settings, and the last word in every profile: they outrank `DB_*` and `POSTGRES_*`. Required, with no fallback, in `prod`. |
 | `REDIS_PASSWORD` | blank locally | Redis password. If non-empty in Compose, Redis starts with authentication enabled. |
 | `SPRING_DATA_REDIS_HOST` / `SPRING_DATA_REDIS_PORT` | `redis` / `6379` in Compose | Redis endpoint for cache and Spring Session. |
 | `APP_DEMO_SEED_ENABLED` | `true` in the local Compose stack | Seed example accounts, customers, invoices, products and plans. Set false outside local development. |
@@ -48,6 +51,7 @@ The complete local example is [.env.example](../.env.example). Spring Boot optio
 
 - Use `SPRING_PROFILES_ACTIVE=prod` and `APP_DEMO_SEED_ENABLED=false`.
 - Set strong, unique PostgreSQL and Redis passwords; configure secrets through the deployment platform, not a committed file.
+- In `prod` the datasource and Redis settings are bare variables: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`. The local defaults and `DB_USER` / `DB_PASSWORD` belong to the development profiles and are deliberately absent there, so a deployment with a missing secret fails at startup rather than connecting as something unintended.
 - Set both `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` for initial provisioning; rotate/remove the bootstrap secret after use.
 - Set `APP_SECRETS_ENCRYPTION_KEY` before using the mail settings screen, and treat it like the database password: it is the only thing standing between a stolen backup and a usable SMTP credential.
 - Set `SESSION_COOKIE_SECURE=true`; expose BillGen only over HTTPS through a trusted reverse proxy.
@@ -73,24 +77,55 @@ $env:SPRING_PROFILES_ACTIVE = "dev"
 mvn spring-boot:run
 ```
 
-The sample local role uses `billgen_dev_only`. If your existing PostgreSQL role has another password, either change `POSTGRES_PASSWORD` in `.env` to that role's password or set `SPRING_DATASOURCE_PASSWORD` in the shell. `SPRING_DATASOURCE_PASSWORD` takes precedence. The `.env` import is optional; environment variables always override it.
+Without Docker, no `.env` is required at all: the development configuration opens
+`jdbc:postgresql://localhost:5432/billgen` as the superuser `postgres` with password `postgres`, the role
+and password a local installation already has, so a `createdb -h localhost -U postgres billgen` is the only
+setup step. If your local `postgres` password is not `postgres`, set `DB_PASSWORD` rather than resetting the
+superuser. The full precedence, pinned by `DatabaseCredentialConfigurationTest`:
+`SPRING_DATASOURCE_PASSWORD` > `DB_PASSWORD` > `POSTGRES_PASSWORD` (from `.env`) > `postgres`, and the same
+shape for the role through `SPRING_DATASOURCE_USERNAME` > `DB_USER` > `POSTGRES_USER` > `postgres`.
+
+Copying `.env.example` matters for Compose, where the postgres container creates a `billgen` role so the
+application is not running as the superuser. A local run reads that same file, so a copied `.env` pins the
+role pair to `billgen` / `billgen_dev_only` unless `DB_USER` / `DB_PASSWORD` say otherwise - name both or
+neither, because half an inherited pair is the usual cause of the `28P01` below. The `.env` import is
+optional; real environment variables always override it.
 
 For `prod`, the required datasource and Redis settings have no fallback defaults. Run `mvn test` for the unit tier (plus the PostgreSQL integration tier when Docker is available), or `mvn package` to build the executable `target/billgen.jar`.
 
 ## Troubleshooting: PostgreSQL password authentication
 
-`FATAL: password authentication failed for user "billgen"` (SQL state `28P01`) means PostgreSQL rejected the configured credentials; Flyway is only the first component trying to connect. The JDK `sun.misc.Unsafe` / Netty message is a separate warning and is not the startup failure.
+`FATAL: password authentication failed for user "postgres"` - or for `billgen` when a project-root `.env`
+is in play - (SQL state `28P01`) means PostgreSQL rejected the configured credentials; Flyway is only the
+first component trying to connect. The JDK `sun.misc.Unsafe` / Netty message is a separate warning and is not
+the startup failure.
 
-Make the application's datasource password match the password assigned to the PostgreSQL role `billgen`:
+Confirm the credentials themselves before touching the application. In a real PostgreSQL environment,
+`psql` is the shortest test of exactly what the app will do, and it is read-only:
 
 ```powershell
-# Windows PowerShell; use your actual local PostgreSQL role password.
-$env:SPRING_DATASOURCE_PASSWORD = "<your billgen role password>"
+psql -h localhost -p 5432 -U postgres -d billgen -c "select current_user, inet_server_port(), version();"
+```
+
+If that prints a row, the configuration is right and anything else is a role/database detail; if it asks for
+a password you do not know, the role's password - not the app setting - is what has to change.
+
+Then give the application the same credentials. For a local cluster, name the password the role actually
+has; do not reset the superuser to match a file:
+
+```powershell
+# Windows PowerShell; use the actual password of the local role you are connecting as.
+$env:DB_PASSWORD = "<your postgres role password>"
 $env:SPRING_PROFILES_ACTIVE = "dev"
 mvn spring-boot:run
 ```
 
-Alternatively, put that same value in `POSTGRES_PASSWORD` in the project-root `.env`; the dev configuration uses it when `SPRING_DATASOURCE_PASSWORD` is unset. Check for a stale `SPRING_DATASOURCE_PASSWORD` in the shell or IDE Run Configuration first—it overrides `.env`. In PowerShell, clear an old shell override with:
+`DB_PASSWORD` beats the `POSTGRES_PASSWORD` in a project-root `.env`, and `SPRING_DATASOURCE_PASSWORD`
+beats both. Check for a stale `SPRING_DATASOURCE_PASSWORD` in the shell or IDE Run Configuration first - it
+overrides everything below it, including a `.env` you edited. A role that does not exist at all
+(`FATAL: role "..." does not exist`, SQL state `28000`) is a different problem: the `.env` you copied names
+the Compose role, so either create it (`createuser`) or drop the `POSTGRES_USER` / `POSTGRES_PASSWORD` lines
+so the local superuser applies. In PowerShell, clear an old shell override with:
 
 ```powershell
 Remove-Item Env:SPRING_DATASOURCE_PASSWORD -ErrorAction SilentlyContinue
@@ -104,7 +139,7 @@ If you do not know the role password and this is a local development database, r
 psql -h localhost -U postgres -d postgres
 ```
 
-At the `psql` prompt, enter `\password billgen`, set the password to the same value as `POSTGRES_PASSWORD` in the project-root `.env` (for the sample default, `billgen_dev_only`), then enter `\q`. For the Compose database, use `docker compose exec postgres psql -U billgen -d billgen` and run the same `\password billgen` command. This changes the role password without deleting database data. Do not reset a shared/production role this way.
+At the `psql` prompt, enter `\password billgen`, set the password to the same value as `POSTGRES_PASSWORD` in the project-root `.env` (for the sample default, `billgen_dev_only`), then enter `\q`. That is the role Compose creates for the application, and resetting a dedicated role is a reasonable development step; resetting a shared or production superuser is not, and there `DB_PASSWORD` / `SPRING_DATASOURCE_PASSWORD` are the levers. For the Compose database, use `docker compose exec postgres psql -U billgen -d billgen` and run the same `\password billgen` command. This changes the role password without deleting database data. Do not reset a shared/production role this way.
 
 Changing `.env` alone does not change a PostgreSQL role in a database initialized earlier. Avoid `docker compose down -v` as a password fix because it deletes the database volume.
 
@@ -169,7 +204,7 @@ select installed_rank, version, description, checksum, success, installed_on
 `repair` or a rebuild are only ever run on a database you can restore, so take the snapshot first:
 
 ```bash
-pg_dump -h localhost -U billgen -d billgen -Fc -f billgen-before-flyway-repair.dump
+pg_dump -h localhost -U postgres -d billgen -Fc -f billgen-before-flyway-repair.dump
 pg_restore --list billgen-before-flyway-repair.dump | head      # confirm the archive is readable
 ```
 
