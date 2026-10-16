@@ -120,36 +120,101 @@ parameter 0: ... Cannot resolve reference to bean 'jpaSharedEM_entityManagerFact
 ```
 
 then the bean named there is not the problem. The shared `EntityManager` is resolved from the
-`entityManagerFactory` bean, so when that one fails to build, every JPA repository, and then the filters
-that use them, report an unsatisfied dependency. The cause is above this in the log - look for the first
-`APPLICATION FAILED TO START` or `Caused by:` block:
+`entityManagerFactory` bean, so when that one fails to build, every JPA repository - and then the filters
+that use them - reports an unsatisfied dependency. The cause is above this in the log; pull it out
+explicitly:
 
 ```powershell
-mvn spring-boot:run 2>&1 | Select-String -Pattern "Caused by","Migr","Validation","Schema" -Context 0,2
+mvn spring-boot:run 2>&1 | Select-String -Pattern "Caused by","checksum","Schema-validation","Successfully applied" -Context 0,2
 ```
 
 ```bash
-mvn spring-boot:run 2>&1 | grep -E -A2 "Caused by|Successfully validated|Successfully applied|Schema-validation|Checksum mismatch"
+mvn spring-boot:run 2>&1 | grep -E -A2 "Caused by|checksum|Schema-validation|Successfully applied"
 ```
 
-Two causes are possible in this project, and both are read from the same table:
+Two causes are possible in this project. Read the history table to tell them apart:
 
 ```sql
-select installed_rank, version, description, success, checksum from flyway_schema_history order by installed_rank;
+select installed_rank, version, description, checksum, success, installed_on
+  from flyway_schema_history order by installed_rank;
 ```
 
-- **`Migration checksum mismatch for version N`.** The SQL file behind a version that this database already
-  applied has changed underneath it - usually a pulled branch whose migration was edited rather than
-  extended. The fix belongs in the repository (an append-only `V(n+1)`, as `V13__notification_settings_prune_inert_codes.sql`
-  is for `V12`). To get a development database moving again while that lands, run Flyway once without
-  checksum validation - `SPRING_FLYWAY_VALIDATE_ON_MIGRATE=false mvn spring-boot:run` - which applies the
-  pending versions and leaves the data alone. Do not use it to get past a mismatch on a shared or production
-  database: there the file that changed is the defect.
-- **`Schema-validation: missing column ... in table ...`.** The entities and the DDL disagree, which means a
-  migration is missing from this database (`version` will stop short of the one you expect) or the mapping is
-  wrong. Re-pull and restart so the pending migration applies; do not set `spring.jpa.hibernate.ddl-auto` to
-  `update` or `none` to hide it - `validate` is what keeps `@Column` definitions and the schema honest.
+- **`Migration checksum mismatch for migration version N`.** The SQL file behind a version this database
+  already applied has changed. The number in the message is the proof: `Applied to database` is the stored
+  checksum, `Resolved locally` is the file in your working tree, and the stored one matches the file as it
+  stood in an earlier commit.
+  - If your database is behind the repository, the fix is on the repository side and is already described by
+    that pair of numbers: pull, and the pending versions apply. This is why `V13` and `V14` exist - the
+    changes they carry were first written into `V12` and `V10` after those had already been applied.
+  - `FlywayMigrationFilesTest` pins the checksum of every migration that has shipped, so editing an old file
+    fails a test instead of your startup. If that test fails after you deliberately changed a migration that
+    has already been released, you are doing the thing it warns about: put the change in a new version.
+  - If *your* database applied a version whose file was later rewritten while it was still unreleased - the
+    one case where your history is the odd one out - `flyway repair` rewrites the stored checksum to match
+    the file. Understand what repair does and does not do: it updates Flyway metadata only, it never re-runs
+    a migration, so the statements that were added to that file have still not executed on your database
+    unless a later version applies them. Repair is a metadata correction for one database, agreed with that
+    database's owner, and it is not a way to make a validation error go away.
+  - Never set `spring.flyway.validate-on-migrate=false` to get past a mismatch on a shared or production
+    database, and do not delete rows from `flyway_schema_history`: that is how a database ends up with a
+    schema nobody can explain.
+- **`Schema-validation: missing column ... in table ...`.** The entities and the DDL disagree, which normally
+  means a migration is missing from this database (the history stops short of the version you expect) or a
+  mapping is wrong. Re-pull and restart so the pending migration applies. Do not set
+  `spring.jpa.hibernate.ddl-auto` to `update` or `none` to hide it - `validate` is what keeps the `@Column`
+  definitions and the schema honest.
 
-A local database that is simply behind can be rebuilt from scratch instead. For the Compose stack,
-`docker compose down -v && docker compose up -d` recreates an empty schema and every migration reapplies;
-this deletes all local data, so keep it to development.
+### Back up before touching migration history
+
+`repair` or a rebuild are only ever run on a database you can restore, so take the snapshot first:
+
+```bash
+pg_dump -h localhost -U billgen -d billgen -Fc -f billgen-before-flyway-repair.dump
+pg_restore --list billgen-before-flyway-repair.dump | head      # confirm the archive is readable
+```
+
+To put it back into a fresh, empty database of the same name:
+
+```bash
+createdb -h localhost -U postgres billgen
+pg_restore -h localhost -U postgres -d billgen --no-owner billgen-before-flyway-repair.dump
+```
+
+For the Compose stack, a local database that is simply unwanted can be discarded instead:
+`docker compose down -v && docker compose up -d` recreates an empty schema and every migration reapplies.
+That deletes all local data; keep it to development.
+
+### PostgreSQL 18 and the Flyway version
+
+The log line
+
+```
+Flyway upgrade recommended: PostgreSQL 18.6 is newer than this version of Flyway and support has not been tested
+```
+
+is a warning, not the cause of anything above it: Flyway has read the version, connected, and continued.
+
+Flyway's version comes from Spring Boot's dependency management, not from this project: Boot 3.5.16 manages
+Flyway **11.7.2** (see `spring-boot-project/spring-boot-dependencies/build.gradle` at that tag), and 11.7.x
+predates PostgreSQL 18, which is what the message says. Current Flyway documents PostgreSQL 12 to 18 as
+supported, but the support landed after the 11.x line Boot 3.5 tests against - 11.8.2 still warns on
+PostgreSQL 18 - so there is no version inside Boot's managed range that silences it. The options, in the
+order they should be considered:
+
+1. **Leave it.** The warning is cosmetic for this project: the migrations are plain DDL plus guarded data
+   statements, and `spring.flyway.*` sets nothing beyond locations and enabled, so none of the configuration
+   API that Flyway 12+ moved behind typed extensions is in use. The database it warns about is also a
+   development choice - Compose pins `postgres:16-alpine`, and the test suite runs against that image.
+2. **Move to a Spring Boot patch or line that manages a newer Flyway**, which keeps Flyway, the JDBC
+   integration and the auto-configuration tested together. That is the only upgrade this project should do
+   for this warning; do not override `flyway.version` alone, because a Flyway major outside Boot's managed
+   line is a compatibility decision for the whole stack, not for one dependency.
+3. If a newer Flyway is ever adopted, re-run the whole suite - `mvn test` - and watch a migration run against
+   a database that already has history, since the interesting differences are in locking and transaction
+   handling rather than in parsing SQL.
+
+For a mismatch you have to repair rather than pull past, the two values in the Flyway message are enough to
+name the commit your database is at: `Applied to database` is the version you have run, `Resolved locally` is
+the file in your working tree, and `git log --oneline -- src/main/resources/db/migration/V< n >__*.sql` shows
+what changed between them. `FlywayMigrationFilesTest` pins the checksum of every migration that has shipped,
+so the mistake of rewriting an applied file fails a test with both numbers in its message.
