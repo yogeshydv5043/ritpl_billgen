@@ -170,13 +170,14 @@ class DatabaseCredentialConfigurationTest {
             compose = new Yaml().load(in);
         }
         Map<?, ?> services = section(compose, "services");
-        assertTrue(hasEntryNaming(section(services, "postgres"), "POSTGRES_USER"),
+        Map<?, ?> postgres = serviceEnvironment(services, "postgres");
+        assertTrue(hasEntryNaming(postgres, "POSTGRES_USER"),
                 "the postgres service has to keep creating its own role, so the development fallback to"
                         + " the superuser does not spread into the demo stack");
-        assertTrue(hasEntryNaming(section(services, "postgres"), "POSTGRES_PASSWORD"),
+        assertTrue(hasEntryNaming(postgres, "POSTGRES_PASSWORD"),
                 "and keep naming its password, or the demo container starts with an empty one");
         for (String app : new String[] {"billgen-a", "billgen-b"}) {
-            Map<?, ?> appEnv = section(section(services, app), "environment");
+            Map<?, ?> appEnv = serviceEnvironment(services, app);
             assertTrue(hasEntryNaming(appEnv, "SPRING_DATASOURCE_USERNAME"),
                     app + " must be told its role explicitly rather than inherit a local default");
             assertTrue(hasEntryNaming(appEnv, "SPRING_DATASOURCE_PASSWORD"),
@@ -258,6 +259,10 @@ class DatabaseCredentialConfigurationTest {
         Map<String, String> merged = new java.util.LinkedHashMap<>(first);
         merged.putAll(second);
         return merged;
+    }
+
+    private static Map<?, ?> serviceEnvironment(Map<?, ?> services, String service) {
+        return section(section(services, service), "environment");
     }
 
     /** Compose writes a service environment either as a mapping or as a list of NAME=value entries. */
