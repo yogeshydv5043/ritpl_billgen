@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Schedule a job')}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content page-content-narrow">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Job management</span>
+                    <h1 th:text="${formTitle}">Schedule a job</h1>
+                    <p class="page-lede">Creating a job resolves its audience and writes batch and recipient rows only. Sending happens later, in the worker, one batch per transaction — so a thousand recipients become ten batches instead of one long request.</p>
+                </div>
+                <div class="button-group"><a class="button button-quiet" th:href="@{/admin/jobs}">Cancel</a></div>
+            </section>
+
+            <p class="form-banner" th:if="${#fields.hasErrors('global')}" role="alert">
+                <span aria-hidden="true">!</span>
+                <span th:each="err : ${#fields.errors('global')}" th:text="${err}">The job could not be created.</span>
+            </p>
+            <p class="form-banner" th:if="${previewError != null}" role="alert"><span aria-hidden="true">!</span><span th:text="${previewError}">Pick a notification first.</span></p>
+
+            <div class="form-banner is-info" th:if="${preview != null}">
+                <span aria-hidden="true">i</span>
+                <span>
+                    <strong th:text="${preview.eligible}">0</strong> recipient(s) would be addressed, split into
+                    <strong th:text="${preview.batches}">0</strong> batch(es) of
+                    <strong th:text="${preview.batchSize}">100</strong>.
+                    Nothing was written by this count.
+                </span>
+            </div>
+
+            <form method="post" th:action="@{/admin/jobs}" th:object="${jobForm}" novalidate>
+                <details class="form-section" id="section-basics" open>
+                    <summary><div><h2>Job</h2><p>What runs and which content it sends.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="name">Job name <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="name" type="text" maxlength="120" required th:field="*{name}"
+                                       placeholder="October expiry reminders"
+                                       th:attr="aria-invalid=${#fields.hasErrors('name')}">
+                                <span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="jobType">Job type</label>
+                                <select id="jobType" th:field="*{jobType}">
+                                    <option th:each="type : ${jobTypes}" th:value="${type}" th:text="${type.label}">General customer email</option>
+                                </select>
+                                <span class="field-help">Customer-facing types always need an explicit confirmation before a cancel or retry.</span>
+                            </div>
+                            <div class="field">
+                                <label for="notificationId">Notification content <span class="field-required" aria-hidden="true">*</span></label>
+                                <select id="notificationId" th:field="*{notificationId}" th:attr="aria-invalid=${#fields.hasErrors('notificationId')}">
+                                    <option value="">Choose an active notification</option>
+                                    <option th:each="row : ${notifications}" th:value="${row.id}"
+                                            th:text="${row.name + ' · ' + row.channel.label + ' · ' + row.triggerEvent.label}">Expiry warning</option>
+                                </select>
+                                <span class="field-help">The rule supplies the title, body and placeholders; a job can only use an active rule.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('notificationId')}" th:errors="*{notificationId}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="description">Note for the run log</label>
+                                <textarea id="description" rows="2" maxlength="500" th:field="*{description}"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="form-section" id="section-audience" open>
+                    <summary><div><h2>Target audience</h2><p>Either every account the notification's filters allow, or an explicit list.</p></div></summary>
+                    <div class="form-section-body">
+                        <p class="form-banner is-info"><span aria-hidden="true">i</span>
+                            <span>Leaving the list empty uses the notification rule's own recipients — its channel, recipient group, customer filter and plan filter. Tick accounts to narrow the job to them instead.</span></p>
+                        <div class="pick-head"><span></span><span>Account</span><span>Status</span><span></span><span></span><span>Include</span></div>
+                        <div class="pick-list" data-checkgroup="#customerIds">
+                            <label class="pick-row" th:each="account : ${customers}">
+                                <input type="checkbox" th:value="${account.id}">
+                                <span><strong th:text="${account.name}">Company</strong><small th:text="'#' + ${account.id}">#1</small></span>
+                                <small th:text="${account.status}">Active</small>
+                                <span></span>
+                                <span></span>
+                                <small>tick</small>
+                            </label>
+                            <p class="empty-inline" th:if="${#lists.isEmpty(customers)}">No live accounts to target.</p>
+                        </div>
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="customerIds">Account ids (comma separated)</label>
+                                <input id="customerIds" type="text" maxlength="2000" th:field="*{customerIds}" placeholder="12,18,24"
+                                       th:attr="aria-invalid=${#fields.hasErrors('customerIds')}">
+                                <span class="field-help">Kept in sync with the picker above. Up to 400 accounts are listed here; the resolver itself is not limited to that.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('customerIds')}" th:errors="*{customerIds}" role="alert"></span>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="form-section" id="section-schedule" open>
+                    <summary><div><h2>Schedule &amp; recurrence</h2><p>Run it now, or hand it to the worker at a chosen time.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="triggerType">Trigger</label>
+                                <select id="triggerType" th:field="*{triggerType}">
+                                    <option th:each="item : ${triggerTypes}" th:value="${item}" th:text="${item.label}">Run now</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="runAt">Run at</label>
+                                <input id="runAt" type="datetime-local" th:field="*{runAt}" th:attr="aria-invalid=${#fields.hasErrors('runAt')}">
+                                <span class="field-help">Blank means as soon as the worker takes the next pass. Server time is used for the comparison.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('runAt')}" th:errors="*{runAt}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="recurrence">Recurrence</label>
+                                <select id="recurrence" th:field="*{recurrence}">
+                                    <option th:each="item : ${recurrences}" th:value="${item}" th:text="${item.label}">Once</option>
+                                </select>
+                                <span class="field-help">A recurring job is re-armed for the next occurrence when its current batches finish.</span>
+                            </div>
+                            <div class="field">
+                                <span class="field-label">State</span>
+                                <label class="check-row" for="active"><input id="active" type="checkbox" th:field="*{active}">
+                                    <span>Active — the worker may claim this job</span></label>
+                                <span class="field-help">An inactive job keeps its rows but is never claimed.</span>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="form-section" id="section-delivery" open>
+                    <summary><div><h2>Batching, retries &amp; priority</h2><p>How much is sent at once and what happens when a send fails.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="batchSize">Batch size <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="batchSize" type="number" min="1" max="500" required th:field="*{batchSize}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('batchSize')}">
+                                <span class="field-help">Recipients are chunked into this many per batch; each batch is its own transaction.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('batchSize')}" th:errors="*{batchSize}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="retryLimit">Retry limit</label>
+                                <input id="retryLimit" type="number" min="0" max="10" th:field="*{retryLimit}">
+                                <span class="field-help">Attempts per failed recipient. Only transient failures are retried; already-delivered recipients are skipped.</span>
+                            </div>
+                            <div class="field">
+                                <label for="retryDelayMinutes">Retry delay (minutes)</label>
+                                <input id="retryDelayMinutes" type="number" min="0" max="1440" th:field="*{retryDelayMinutes}">
+                            </div>
+                            <div class="field">
+                                <label for="priority">Priority</label>
+                                <input id="priority" type="number" min="1" max="9" th:field="*{priority}">
+                                <span class="field-help">Higher is claimed first when several jobs are queued.</span>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <div class="form-actions">
+                    <button class="button button-primary" type="submit" name="action" value="save" data-busy-label="Creating"><span aria-hidden="true">✓</span> Create job</button>
+                    <button class="button" type="submit" name="action" value="preview" formnovalidate>Count eligible recipients</button>
+                    <a class="button button-quiet" th:href="@{/admin/jobs}">Discard</a>
+                    <span class="spacer"></span>
+                    <span class="field-help">Creating a job writes rows only — no email leaves the system until the worker runs.</span>
+                </div>
+            </form>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

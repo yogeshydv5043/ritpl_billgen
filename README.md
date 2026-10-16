@@ -1,8 +1,8 @@
 # BillGen
 
-BillGen is a multi-tenant billing and invoice workspace built with Java 17, Spring Boot, PostgreSQL, Redis, Spring Security and Thymeleaf. It includes customer account isolation, customer-owned products and categories, admin-managed invoice templates and plans, plan-based template entitlements, invoice creation and print-ready views, an authenticated REST API, a Spring Cloud API gateway, and an Nginx reverse proxy/load balancer.
+BillGen is a multi-tenant billing and invoice workspace built with Java 21, Spring Boot, PostgreSQL, Redis, Spring Security and Thymeleaf. It includes tenant-isolated customer workspaces, company profiles and logo snapshots, products and categories, plan/template entitlements and quotas, server-calculated invoices and discounts, subscription expiry reminders, protected audit trails, scoped Excel exports, an authenticated REST API, a Spring Cloud API gateway, and an Nginx reverse proxy/load balancer.
 
-> **Project status:** the application enforces customer data isolation and plan/template entitlements. Customers can activate an available plan from their portal, or an Admin can assign a plan. Activation is immediate; payment checkout, outbound email delivery and server-side PDF generation are not included. Invoice print views can be saved as PDF in the browser.
+> **Project status:** the application has exactly two roles: Admin (`ADMIN`) and Customer (`CUSTOMER`). Customers can activate an available plan from their portal, or an Admin can assign a plan. Activation is immediate; payment checkout and outbound email delivery are not included. Invoices are downloadable as server-generated PDFs and also have a browser print view.
 
 ## Quick start with Docker Compose
 
@@ -39,10 +39,18 @@ docker compose down
 
 ## Run the application without Docker
 
-Requirements: JDK 17+, Maven 3.9+, PostgreSQL and Redis.
+Requirements: JDK 21+, Maven 3.9+, PostgreSQL and Redis.
 
 1. Create a PostgreSQL database/user and start Redis.
-2. Copy `.env.example` to `.env`. Spring Boot reads that local file when run from the project directory; by default it expects PostgreSQL user `billgen` with password `billgen_dev_only`. Set `POSTGRES_PASSWORD` in `.env` to the password already assigned to your local `billgen` role, or set `SPRING_DATASOURCE_PASSWORD` in your shell to override it.
+2. Point the application at your database. The development configuration opens
+   `jdbc:postgresql://localhost:5432/billgen` as the PostgreSQL superuser `postgres` with password
+   `postgres`, which is what a freshly installed local cluster already answers to, so no role has to be
+   created. If that role's password is different, name your own pair - `DB_USER` and `DB_PASSWORD` in the
+   shell - and a database called something else is set with `POSTGRES_DB` or a whole
+   `SPRING_DATASOURCE_URL`. Copy `.env.example` to `.env` only for the Docker Compose stack: Spring Boot
+   also reads that file for a local run, and its `POSTGRES_USER` / `POSTGRES_PASSWORD` (a least-privilege
+   `billgen` role the Compose container creates for itself) outrank the superuser fallback except where
+   `DB_USER` / `DB_PASSWORD` override them.
 3. Activate the dev profile and run the web application:
 
    ```bash
@@ -52,19 +60,23 @@ Requirements: JDK 17+, Maven 3.9+, PostgreSQL and Redis.
 
 4. Open <http://localhost:8080>.
 
-The development profile defaults to `jdbc:postgresql://localhost:5432/billgen`, PostgreSQL user `billgen` / password `billgen_dev_only`, Redis at `localhost:6379`, and demo seeding enabled. Override these with matching PostgreSQL role credentials if your local database was initialized differently. If startup reports SQL state `28P01`, follow the [database authentication troubleshooting steps](docs/setup.md#troubleshooting-postgresql-password-authentication) to align the app setting and role password. Flyway applies schema migrations on first startup. Hibernate validates the schema; it does not create or update tables.
+The development configuration defaults to `jdbc:postgresql://localhost:5432/billgen`, PostgreSQL user `postgres` / password `postgres`, Redis at `localhost:6379`, and demo seeding enabled. Precedence runs `SPRING_DATASOURCE_*`, then `DB_USER` / `DB_PASSWORD`, then `POSTGRES_*` from an inherited `.env`, then those local defaults - `DatabaseCredentialConfigurationTest` pins that order and asserts the production profile keeps no fallback at all. Create the database itself once: `createdb -h localhost -U postgres billgen`. If startup reports SQL state `28P01`, follow the [database authentication troubleshooting steps](docs/setup.md#troubleshooting-postgresql-password-authentication) to align the app setting and role password. Flyway applies schema migrations on first startup. Hibernate validates the schema; it does not create or update tables.
 
 To run the gateway separately, build and start the `gateway/` Maven project after starting BillGen. Set `BILLGEN_A_URI` and `BILLGEN_B_URI` to reachable application instances. For the complete reverse-proxy/load-balancer setup, use Docker Compose.
 
 ## Roles and features
 
 - **Admin:** customer account provisioning, plan and template management, cross-account read-only data access, invoice/product/category statistics and subscription management.
-- **Customer:** private workspace for its own invoices, products and categories; can activate an available plan and generate invoices using only active templates included in that plan.
+- **Customer:** a full self-service panel for its own tenant - company profile and password, account settings (invoice defaults, catalogue defaults, list page size, alert preferences and its audit viewing period), plan purchase/renewal with monthly or yearly terms, template selection and customisation, products and categories with search/sort/paging and Excel export, invoice creation with a server-side preview, draft editing, cancellation, and a live dashboard of cards, recent activity and quick actions. Every figure and list is read from the account's own rows; nothing is simulated.
 - **Templates and plans:** Admins create templates, assign multiple templates to a plan, and control availability. A customer subscription grants template access; hiding a template or cancelling the plan immediately withdraws that access.
-- **Invoices:** multiple line items, quantity, unit price, line-level tax, due dates, draft/sent/paid states, currency and notes. The customer account is derived from the authenticated session, and the chosen template is validated on the server.
+- **Invoices:** multiple line items, quantity, unit price, line-level tax, flat post-tax discount, due dates, draft/sent/paid/cancelled states, currency and notes. Totals and unique numbers are server-calculated; invoice allowances are concurrency-safe and snapshot company/logo/template details for history.
+- **Plans and renewals:** Customers choose an available plan with immediate activation; Admin may assign plans and override limits. Active-term plan changes carry issued-invoice usage forward; a new term after expiry resets it. Drafts do not consume allowance; cancelling an issued invoice does not restore its slot.
+- **Company identity and custom designs:** each Customer account is its own invoice identity, with a profile/logo saved as a snapshot on each invoice. Customers can create custom invoice templates within plan limits; reducing a limit does not disable existing templates.
 - **Product catalogue:** products/services and product categories are owned by one customer account. SKUs are unique within an account; categories may have the same name across accounts.
 - **Data isolation:** all customer-owned rows carry a tenant/customer id, including invoice line items (whose tenant must match their parent invoice). Customer repository queries are scoped to the session account, foreign IDs return `404`, and customer create/update/delete operations validate ownership in the backend. Admin access to customer data is read-only.
-- **Admin dashboard:** customer-wise invoice totals/counts, active products, categories, account details and purchased plans.
+- **Admin dashboard and reports:** authorized customer-wise statistics plus monthly invoice reports for the current calendar month and previous nine months, including term allowance usage and currency-grouped financial totals.
+- **Exports and audit:** scoped product, invoice and audit XLSX exports protect untrusted text against spreadsheet formulas. Audit access/exports are logged; audit rows are append-only and exclude passwords, auth secrets and payment credentials.
+- **Expiry reminders:** in-app reminders are generated seven, three and one day before subscription expiry and when a plan expires; customers retain read access to historical invoices and must renew to create new billing data.
 - **Caching:** Redis caches active plans and dashboard metrics (180-second default TTL); administrative and customer writes evict affected entries.
 - **Sessions:** Spring Session stores web sessions in Redis so either application instance can serve a signed-in user.
 - **API:** versioned JSON endpoints under `/api/v1`, protected by HTTP Basic for Admin and Customer accounts with the same tenant checks as the web UI; see [API reference](docs/api-reference.md).
@@ -86,6 +98,7 @@ For production, replace every development password; set `APP_DEMO_SEED_ENABLED=f
 src/main/java/com/ritpl/billgen/   Spring Boot app (web, API, security, services, JPA)
 src/main/resources/db/migration/  Flyway schema and tenant migration
 src/main/resources/templates/     Responsive Thymeleaf pages and print view
+src/main/java/.../service/        InvoicePdfService renders snapshot-only PDFs
 src/main/resources/static/         Local CSS and JavaScript
 src/test/                          Unit tests
  gateway/                          Spring Cloud Gateway application
@@ -101,4 +114,31 @@ mvn test
 mvn package
 ```
 
-The invoice calculator has unit tests. A live integration check also needs PostgreSQL, Redis and Docker; run `docker compose up --build` and test the pages/API in a browser/client.
+Testing happens in two tiers.
+
+| Tier | Command | What it needs | What it proves |
+| --- | --- | --- | --- |
+| Unit | `mvn test` | nothing but the JDK | server-side invoice math (tax, flat discount, rounding), tenant-scope rules, quota and allowance policy, export windowing and formula-injection protection |
+| Integration | `mvn test` with Docker running | Docker (Testcontainers starts PostgreSQL 16) | Flyway migrations apply, the JPA mapping validates against the schema, every Spring Data query parses and plans, concurrent invoice generation cannot exceed the allowance, invoice snapshots survive later edits, expiry blocks writes but not history, audit search stays inside the tenant, and expiry reminders are never duplicated |
+
+`BillingIntegrationTest` skips itself automatically when Docker is unavailable, so `mvn test` still
+passes on a machine without a container runtime. Redis is not required for the tests; sessions and
+caches are switched off in the test context.
+
+For the full multi-service stack (Nginx, gateway, two app instances, PostgreSQL, Redis) run
+`docker compose up --build` and exercise the pages and API in a browser or client.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request. It provisions JDK 21 (Temurin) and a PostgreSQL 16 service container, then runs:
+
+```bash
+mvn -B -ntp -DskipTests compile
+mvn -B -ntp test
+mvn -B -ntp -DskipTests package
+```
+
+Surefire reports are uploaded as a workflow artifact on every run, including failures, and the test
+totals are published as a check-run annotation. The integration tests bring up their own throwaway
+PostgreSQL container, so the workflow needs no database credentials at all. When CI fails, the
+Maven diagnostics and the failing Surefire reports are posted as a comment on the open pull request.

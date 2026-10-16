@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(${formTitle})}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content page-content-narrow">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Dynamic notification management</span>
+                    <h1 th:text="${formTitle}">Create notification</h1>
+                    <p class="page-lede">Write the message once; the system fills the placeholders from whatever triggered it. Activation is refused while any token is unknown, so a rule can never send <code>{{typo}}</code> to a customer.</p>
+                </div>
+                <div class="button-group"><a class="button button-quiet" th:href="@{/admin/notifications}">Cancel</a></div>
+            </section>
+
+            <p class="form-banner" th:if="${#fields.hasErrors('global')}" role="alert">
+                <span aria-hidden="true">!</span>
+                <span th:each="err : ${#fields.errors('global')}" th:text="${err}">The notification could not be saved.</span>
+            </p>
+
+            <form method="post" th:action="@{${formAction}}" th:object="${notificationForm}" novalidate>
+                <details class="form-section" id="section-content" open>
+                    <summary><div><h2>Content</h2><p>What the recipient sees, in-app and in the email.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="name">Internal name <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="name" type="text" maxlength="120" required th:field="*{name}"
+                                       placeholder="Subscription expiring — 7 days"
+                                       th:attr="aria-invalid=${#fields.hasErrors('name')}">
+                                <span class="field-help">Administrators only; shown in the list and in delivery history.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="title">Title <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="title" type="text" maxlength="190" required th:field="*{title}"
+                                       placeholder="{{companyName}}: plan expires on {{expiryDate}}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('title')}">
+                                <span class="field-error" th:if="${#fields.hasErrors('title')}" th:errors="*{title}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="body">Message body <span class="field-required" aria-hidden="true">*</span></label>
+                                <textarea id="body" rows="8" maxlength="4000" required th:field="*{body}"
+                                          aria-describedby="body-help"
+                                          placeholder="Hello {{customerName}},&#10;&#10;Your {{planName}} plan ends on {{expiryDate}} — {{daysRemaining}} day(s) left. You have {{remainingLimit}} of {{invoiceLimit}} invoices remaining this period.&#10;&#10;Renew from Plan &amp; usage to keep your templates available."
+                                          th:attr="aria-invalid=${#fields.hasErrors('body')}"></textarea>
+                                <span class="field-help" id="body-help">Plain text. Line breaks are kept; HTML is never rendered. Use the buttons below to insert a value.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('body')}" th:errors="*{body}" role="alert"></span>
+                            </div>
+                        </div>
+
+                        <div class="placeholder-bar">
+                            <span class="field-label">Available placeholders</span>
+                            <div class="chips">
+                                <button class="chip" type="button" th:each="token : ${placeholders}"
+                                        th:data-placeholder-insert="'#body'"
+                                        th:data-placeholder-insert-value="|{{${token}}}|"
+                                        th:text="${token}">companyName</button>
+                            </div>
+                        </div>
+                        <details class="form-section">
+                            <summary><div><h2>Every accepted token</h2><p>Anything outside this list is rejected on activation.</p></div></summary>
+                            <div class="form-section-body">
+                                <p class="section-note" th:text="${#strings.setJoin(allowedPlaceholders, ', ')}">companyName, customerName</p>
+                            </div>
+                        </details>
+                    </div>
+                </details>
+
+                <details class="form-section" id="section-delivery" open>
+                    <summary><div><h2>Trigger, channel &amp; recipients</h2><p>When it fires, how it is sent and who it reaches.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="triggerEvent">Trigger event <span class="field-required" aria-hidden="true">*</span></label>
+                                <select id="triggerEvent" th:field="*{triggerEvent}">
+                                    <option th:each="trigger : ${triggers}" th:value="${trigger}" th:text="${trigger.label + ' · ' + trigger.name()}">Subscription expiring</option>
+                                </select>
+                                <span class="field-help">The event fires the rule; a job or the expiry sweep supplies the values for the placeholders.</span>
+                            </div>
+                            <div class="field">
+                                <label for="channel">Channel <span class="field-required" aria-hidden="true">*</span></label>
+                                <select id="channel" th:field="*{channel}">
+                                    <option th:each="channel : ${channels}" th:value="${channel}" th:text="${channel.label}">Email</option>
+                                </select>
+                                <span class="field-help">Email needs a configured mail transport; without one the delivery is recorded as simulated instead of silently dropped.</span>
+                            </div>
+                            <div class="field">
+                                <label for="recipientType">Recipient group</label>
+                                <select id="recipientType" th:field="*{recipientType}">
+                                    <option th:each="type : ${recipientTypes}" th:value="${type}" th:text="${type.label}">Customer accounts</option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="statusFilter">Customer filter</label>
+                                <select id="statusFilter" th:field="*{statusFilter}">
+                                    <option th:each="filter : ${statusFilters}" th:value="${filter}" th:text="${filter.label}">Every account</option>
+                                </select>
+                                <span class="field-help">Applied on top of the plan filter when the rule is fired in bulk.</span>
+                            </div>
+                            <div class="field">
+                                <label for="scheduleExpression">Schedule</label>
+                                <input id="scheduleExpression" type="text" maxlength="64" th:field="*{scheduleExpression}"
+                                       placeholder="0 0 8 * * *" th:attr="aria-invalid=${#fields.hasErrors('scheduleExpression')}">
+                                <span class="field-help">Optional cron expression for rules that check a condition on a clock. Leave blank to fire only on the trigger event.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('scheduleExpression')}" th:errors="*{scheduleExpression}" role="alert"></span>
+                            </div>
+                        </div>
+
+                        <div class="pick-head"><span></span><span>Plan filter</span><span>Status</span><span>Tick to limit this rule</span></div>
+                        <div class="pick-list" data-checkgroup="#planIds">
+                            <label class="pick-row" th:each="plan : ${plans}">
+                                <input type="checkbox" th:value="${plan.id}">
+                                <span><strong th:text="${plan.name}">Growth</strong><small th:text="${plan.code}">GROWTH</small></span>
+                                <small th:text="${plan.description != null ? plan.description : '—'}">—</small>
+                                <span class="badge" th:classappend="${plan.active ? 'status-active' : 'status-inactive'}" th:text="${plan.active ? 'Active' : 'Inactive'}">Active</span>
+                            </label>
+                            <p class="empty-inline" th:if="${#lists.isEmpty(plans)}">No live plans to filter by — leave the field empty to reach every account.</p>
+                        </div>
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="planIds">Plan ids (comma separated)</label>
+                                <input id="planIds" type="text" maxlength="200" th:field="*{planIds}" placeholder="1,4"
+                                       th:attr="aria-invalid=${#fields.hasErrors('planIds')}">
+                                <span class="field-help">Filled in by the picker above. Blank means every plan.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('planIds')}" th:errors="*{planIds}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <span class="field-label">State</span>
+                                <label class="check-row" for="active"><input id="active" type="checkbox" th:field="*{active}">
+                                    <span>Active — this rule may send as soon as its trigger occurs</span></label>
+                                <span class="field-help">An inactive rule is saved but never fires.</span>
+                            </div>
+                        </div>
+                        <p class="form-banner is-info"><span aria-hidden="true">i</span>
+                            <span th:if="${notification != null}">This rule has already sent
+                                <strong th:text="${notification.lastRunAt != null ? '— last run ' + notification.lastRunAt : 'at some point'}">runs</strong>.
+                                Editing the text does not change anything already delivered; delivery rows keep the title and body as sent.</span>
+                            <span th:unless="${notification != null}">Nothing is sent until you activate it, so you can draft safely.</span></p>
+                    </div>
+                </details>
+
+                <div class="form-actions">
+                    <button class="button button-primary" type="submit" data-busy-label="Saving"><span aria-hidden="true">✓</span> Save notification</button>
+                    <a class="button" th:href="@{/admin/notifications}">Discard</a>
+                    <span class="spacer"></span>
+                    <span class="field-help" th:if="${notification != null}"><a class="text-link" th:href="@{/admin/notifications/{id}/history(id=${notification.id})}">Delivery history <span aria-hidden="true">→</span></a></span>
+                </div>
+            </form>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

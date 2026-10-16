@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Audit record')}"></head>
+<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content page-content-narrow">
+    <div class="breadcrumb"><a th:href="${backUrl}" >Audit trail</a><span>/</span><span th:text="${auditRecord.id}">1</span></div>
+    <section class="page-title-row compact-title"><div><span class="kicker">APPEND-ONLY EVENT</span><h1 th:text="${auditRecord.action + ' · ' + auditRecord.resourceType}">CREATE · INVOICE</h1><p class="page-lede" th:text="${auditRecord.summary}">Action recorded.</p></div></section>
+    <section class="panel profile-card"><dl class="details-list">
+        <div><dt>Timestamp (UTC)</dt><dd th:text="${auditRecord.createdAt}">2026-10-12T08:00:00Z</dd></div>
+        <div><dt>Actor</dt><dd th:text="${auditRecord.actor}">user@example.com</dd></div>
+        <div><dt>Customer</dt><dd th:text="${auditRecord.customer != null ? auditRecord.customer.companyName : 'System'}">Customer</dd></div>
+        <div><dt>Outcome</dt><dd th:text="${auditRecord.outcome}">SUCCESS</dd></div>
+        <div><dt>Resource</dt><dd th:text="${auditRecord.resourceName + (auditRecord.resourceId != null ? ' · ' + auditRecord.resourceId : '')}">Invoice</dd></div>
+        <div><dt>Before values</dt><dd><pre th:text="${auditRecord.beforeValues != null ? auditRecord.beforeValues : '—'}">—</pre></dd></div>
+        <div><dt>After values</dt><dd><pre th:text="${auditRecord.afterValues != null ? auditRecord.afterValues : '—'}">—</pre></dd></div>
+    </dl></section>
+    <div class="form-actions"><a class="button button-secondary" th:href="${backUrl}">← Back to audit trail</a></div>
+    <p class="page-footer">Audit events are protected from editing/deletion and exclude passwords, secrets, and payment credentials.</p>
+</div></main></div></body></html>

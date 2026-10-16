@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Search')}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content page-content-narrow">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Global search</span>
+                    <h1>Find a record</h1>
+                    <p class="page-lede">Matches are read from the database with the same rules as the lists: deleted accounts and retired configuration never appear, and nothing is guessed from a cache.</p>
+                </div>
+            </section>
+
+            <form class="panel list-panel" method="get" th:action="@{/admin/search}" role="search">
+                <div class="list-toolbar">
+                    <div class="search-form">
+                        <span aria-hidden="true">⌕</span>
+                        <input type="search" name="q" th:value="${q}" minlength="2" required
+                               placeholder="Company, contact or email" aria-label="Search term" autocomplete="off">
+                        <button type="submit">Search</button>
+                    </div>
+                    <p class="toolbar-note" th:if="${#strings.length(q) < 2}">Type at least two characters.</p>
+                </div>
+            </form>
+
+            <th:block th:if="${#strings.length(q) >= 2}">
+                <section class="panel list-panel" th:if="${!#lists.isEmpty(results.customers)}">
+                    <div class="panel-heading"><div><span class="kicker">CUSTOMER MANAGEMENT</span><h2>Accounts <span class="heading-count" th:text="${#lists.size(results.customers)}">0</span></h2></div>
+                        <a class="text-link" th:href="@{/customers(q=${q})}">Full filtered list <span aria-hidden="true">→</span></a></div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead><tr><th scope="col">Account</th><th scope="col">Contact</th><th scope="col">Billing email</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Open</span></th></tr></thead>
+                            <tbody>
+                            <tr th:each="account : ${results.customers}">
+                                <td><a class="customer-cell" th:href="@{/customers/{id}(id=${account.id})}">
+                                    <span class="person-avatar" aria-hidden="true" th:text="${#strings.substring(account.companyName, 0, 1).toUpperCase()}">N</span>
+                                    <span class="customer-cell-copy"><strong th:text="${account.companyName}">Company</strong><small th:text="'#' + ${account.id}">#1</small></span></a></td>
+                                <td th:text="${account.contactName}">Contact</td>
+                                <td th:text="${account.email}">a@b.test</td>
+                                <td><span class="badge" th:classappend="${account.status.name() == 'ACTIVE' ? 'status-active' : 'status-disabled'}" th:text="${account.status.label}">Active</span></td>
+                                <td><a class="row-arrow" th:href="@{/customers/{id}(id=${account.id})}" th:attr="aria-label='Open ' + ${account.companyName}">→</a></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <div class="grid-2">
+                    <section class="panel" th:if="${!#lists.isEmpty(results.plans)}">
+                        <div class="panel-heading"><div><span class="kicker">SUBSCRIPTION MANAGEMENT</span><h2>Plans</h2></div></div>
+                        <div class="panel-body">
+                            <ul class="modal-list">
+                                <li th:each="plan : ${results.plans}"><strong th:text="${plan.name}">Growth</strong>
+                                    <span><code th:text="${plan.code}">GROWTH</code> · <span th:text="${plan.active ? 'Active' : 'Inactive'}">Active</span></span>
+                                    <a class="row-arrow" th:href="@{/admin/plans/{id}(id=${plan.id})}" th:attr="aria-label='Open plan ' + ${plan.name}">→</a></li>
+                            </ul>
+                        </div>
+                    </section>
+
+                    <section class="panel" th:if="${!#lists.isEmpty(results.templates)}">
+                        <div class="panel-heading"><div><span class="kicker">TEMPLATE MANAGEMENT</span><h2>Invoice templates</h2></div></div>
+                        <div class="panel-body">
+                            <ul class="modal-list">
+                                <li th:each="template : ${results.templates}"><strong th:text="${template.name}">Classic</strong>
+                                    <span><code th:text="${template.code}">CLASSIC</code> · <span th:text="'v' + ${template.version}">v1</span></span>
+                                    <a class="row-arrow" th:href="@{/admin/templates/{id}/preview(id=${template.id})}" th:attr="aria-label='Preview ' + ${template.name}">→</a></li>
+                            </ul>
+                        </div>
+                    </section>
+                </div>
+
+                <section class="panel" th:if="${!#lists.isEmpty(results.notifications)}">
+                    <div class="panel-heading"><div><span class="kicker">NOTIFICATIONS</span><h2>Notification rules</h2></div></div>
+                    <div class="panel-body">
+                        <ul class="modal-list">
+                            <li th:each="row : ${results.notifications}"><strong th:text="${row.name}">Expiry warning</strong>
+                                <span><code th:text="${row.triggerEvent.name()}">TRIGGER</code> · <span th:text="${row.active ? 'Active' : 'Inactive'}">Active</span></span>
+                                <a class="row-arrow" th:href="@{/admin/notifications/{id}/edit(id=${row.id})}" th:attr="aria-label='Edit ' + ${row.name}">→</a></li>
+                        </ul>
+                    </div>
+                </section>
+
+                <th:block th:if="${#lists.isEmpty(results.customers) and #lists.isEmpty(results.plans) and #lists.isEmpty(results.templates) and #lists.isEmpty(results.notifications)}">
+                    <div th:replace="~{fragments/components :: empty('⌕', 'Nothing matches the search for ' + q,
+                        'Search covers live accounts, plans, invoice templates and notification rules. Deleted accounts and retired configuration are never returned.',
+                        'Browse all accounts', '/customers')}"></div>
+                </th:block>
+            </th:block>
+
+            <footer class="page-footer">
+                <span>Configuration matches are filtered in memory over the live lists; account matches use a SQL search.</span>
+            </footer>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

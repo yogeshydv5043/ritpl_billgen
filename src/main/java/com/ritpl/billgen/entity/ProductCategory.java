@@ -40,6 +40,9 @@ public class ProductCategory implements Serializable {
     private String name;
     @Column(length = 300)
     private String description;
+    /** A hidden category stops being offered on new items; products already in it keep it. */
+    @Column(nullable = false)
+    private boolean active = true;
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
     @Column(name = "updated_at", nullable = false)
@@ -56,6 +59,8 @@ public class ProductCategory implements Serializable {
     @PreUpdate void onUpdate() { updatedAt = LocalDateTime.now(); }
 
     public Long getId() { return id; }
+    public boolean isActive() { return active; }
+    public void setActive(boolean v) { active = v; }
     public Customer getCustomer() { return customer; }
     public void setCustomer(Customer value) { customer = value; }
     public Long getCustomerId() { return customer == null ? null : customer.getId(); }

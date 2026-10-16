@@ -4,9 +4,15 @@ spring:
   application:
     name: billgen
   datasource:
+    # Fallbacks here are development fallbacks, and they match application-dev.yml deliberately: a
+    # default that only appeared once somebody remembered to activate a profile was a default nobody
+    # could rely on. The prod profile carries no fallback at all, so nothing local reaches a
+    # deployment. See DatabaseCredentialConfigurationTest for the resolution order this comment
+    # depends on. DB_USER / DB_PASSWORD outrank the POSTGRES_* pair a .env may still carry from the
+    # Compose setup, so naming local credentials is never silently half-applied.
     url: "${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/${POSTGRES_DB:billgen}}"
-    username: ${SPRING_DATASOURCE_USERNAME:${POSTGRES_USER:billgen}}
-    password: ${SPRING_DATASOURCE_PASSWORD:${POSTGRES_PASSWORD:billgen_dev_only}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USER:${POSTGRES_USER:postgres}}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:${POSTGRES_PASSWORD:postgres}}}
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:12}
       minimum-idle: 2
@@ -38,6 +44,10 @@ spring:
       namespace: billgen:sessions
   thymeleaf:
     cache: ${THYMELEAF_CACHE:false}
+  servlet:
+    multipart:
+      max-file-size: 1MB
+      max-request-size: 2MB
 server:
   port: ${SERVER_PORT:8080}
   forward-headers-strategy: framework
@@ -64,3 +74,25 @@ app:
   bootstrap:
     admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
     admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+  jobs:
+    # Durable worker. It is a separate concern from the web tier: batches are claimed on a poll,
+    # never inside a request. Set false to keep the queues growing without draining them.
+    enabled: ${APP_JOBS_ENABLED:true}
+    poll-interval-ms: ${APP_JOBS_POLL_INTERVAL_MS:15000}
+    initial-delay-ms: ${APP_JOBS_INITIAL_DELAY_MS:12000}
+    batches-per-poll: ${APP_JOBS_BATCHES_PER_POLL:5}
+  customers:
+    deletion:
+      # false = outstanding SENT invoices do not block a soft delete (the reason is still required).
+      block-outstanding-invoices: ${APP_CUSTOMERS_BLOCK_OUTSTANDING_DELETION:true}
+  secrets:
+    # Seals the SMTP password an administrator stores in the email settings. Generate one per
+    # environment (`openssl rand -hex 32`) and keep it out of the repository. With no key the
+    # application still runs, the settings screen says the password cannot be stored, and nothing is
+    # ever written in plain text.
+    encryption-key: ${APP_SECRETS_ENCRYPTION_KEY:}
+  mail:
+    from: ${APP_MAIL_FROM:no-reply@billgen.local}
+  subscription:
+    time-zone: ${SUBSCRIPTION_TIME_ZONE:Asia/Kolkata}
+    expiry-reminder-cron: ${SUBSCRIPTION_EXPIRY_REMINDER_CRON:0 0 9 * * *}

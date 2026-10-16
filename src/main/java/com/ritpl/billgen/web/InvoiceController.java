@@ -19,8 +19,11 @@ import com.ritpl.billgen.service.InvoiceService;
 @RequestMapping("/invoices")
 public class InvoiceController {
     private final InvoiceService invoices;
+    private final com.ritpl.billgen.service.InvoicePdfService invoicePdf;
 
-    public InvoiceController(InvoiceService invoices) { this.invoices = invoices; }
+    public InvoiceController(InvoiceService invoices, com.ritpl.billgen.service.InvoicePdfService invoicePdf) {
+        this.invoices = invoices; this.invoicePdf = invoicePdf;
+    }
 
     @GetMapping
     public String list(@AuthenticationPrincipal AppUserPrincipal principal,
@@ -42,8 +45,18 @@ public class InvoiceController {
 
     @GetMapping("/{id}/print")
     public String print(@PathVariable long id, @AuthenticationPrincipal AppUserPrincipal principal, Model model) {
+        invoices.recordPrintExport(TenantScope.from(principal), id);
         model.addAttribute("invoice", invoices.findById(TenantScope.from(principal), id));
         model.addAttribute("backUrl", "/invoices/" + id);
+        model.addAttribute("pdfUrl", "/invoices/" + id + "/invoice.pdf");
         return "invoices/print";
+    }
+
+    /** Read-only download of an invoice PDF; the tenant check and the audit entry happen in the service. */
+    @GetMapping("/{id}/invoice.pdf")
+    public org.springframework.http.ResponseEntity<byte[]> downloadPdf(@PathVariable long id,
+            @AuthenticationPrincipal AppUserPrincipal principal) {
+        var invoice = invoices.preparePdfDownload(TenantScope.from(principal), id);
+        return InvoicePdfDownload.of(invoice, id, invoicePdf.render(invoice));
     }
 }

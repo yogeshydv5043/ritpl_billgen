@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Notifications')}"></head>
+<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content page-content-narrow">
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <section class="page-title-row compact-title"><div><span class="kicker">WRITTEN BY THE PLATFORM, NOT BY US</span><h1>Notifications</h1><p class="page-lede">Expiry reminders, allowance warnings, payment confirmations and security notices for <strong th:text="${customer != null ? customer.companyName : 'your account'}">your account</strong>. A notice appears here only after the event it describes has actually happened.</p></div><a class="button button-secondary" th:href="@{/portal/settings}">Choose which alerts arrive <span>→</span></a></section>
+
+    <section class="panel list-panel">
+        <div class="list-toolbar"><div class="list-count"><span class="count-dot"></span><strong th:text="${#lists.size(notifications)}">0</strong> notices</div><span class="toolbar-note">Newest first · the thirty most recent</span>
+            <span class="toolbar-note" th:if="${settings != null}">
+                <span th:if="${settings.notifyExpiryReminders}">expiry reminders on</span><span th:unless="${settings.notifyExpiryReminders}">expiry reminders off</span> ·
+                <span th:if="${settings.notifyQuotaAlerts}">quota alerts on</span><span th:unless="${settings.notifyQuotaAlerts}">quota alerts off</span> ·
+                <span th:if="${settings.notifyPaymentUpdates}">payment updates on</span><span th:unless="${settings.notifyPaymentUpdates}">payment updates off</span>
+            </span></div>
+        <ul class="inbox-list">
+            <li th:each="notification : ${notifications}" th:classappend="${notification.status.name() == 'READ'} ? ' is-read' : ''">
+                <span class="inbox-icon" th:switch="${notification.notificationType}">
+                    <span th:case="'EXPIRING'" aria-hidden="true">◷</span><span th:case="'EXPIRED'" aria-hidden="true">⊘</span>
+                    <span th:case="'QUOTA'" aria-hidden="true">◑</span><span th:case="'PAYMENT'" aria-hidden="true">✓</span>
+                    <span th:case="'SECURITY'" aria-hidden="true">⚑</span><span th:case="*" aria-hidden="true">✉</span>
+                </span>
+                <span class="inbox-body">
+                    <span class="inbox-topic" th:text="${notification.notificationType}">EXPIRING</span>
+                    <p th:text="${notification.message}">Your plan expires soon.</p>
+                    <small th:text="${'Recorded ' + #strings.replace(notification.createdAt, 'T', ' ') + (notification.status.name() == 'READ' ? ' · read' : ' · unread')}">Recorded</small>
+                </span>
+                <form th:if="${notification.status.name() != 'READ'}" th:action="@{/portal/notifications/{id}/read(id=${notification.id})}" method="post"><button class="button button-small button-secondary" type="submit">Mark read</button></form>
+            </li>
+        </ul>
+        <div class="empty-state" th:if="${#lists.isEmpty(notifications)}"><span class="empty-icon">✉</span><h2>Nothing needs your attention.</h2><p>Reminders about your plan, your allowance, payments and security will appear here as they happen.</p><a class="button button-secondary button-small" th:href="@{/portal/settings}">Check your alert preferences</a></div>
+    </section>
+    <p class="form-footnote"><span>✳</span> Security notices are delivered even if they are switched off, so a credential change cannot be hidden from the account it belongs to. <a th:href="@{/portal/audit}">The audit history</a> keeps the record either way.</p>
+    <footer class="page-footer"><span>Only your account can read these.</span><a th:href="@{/portal}">Back to my workspace ↗</a></footer>
+</div></main></div></body></html>

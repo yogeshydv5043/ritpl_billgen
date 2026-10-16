@@ -4,7 +4,7 @@
 <body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
 <main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content">
     <div th:replace="~{fragments/layout :: flash}"></div>
-    <section class="page-title-row"><div><span class="kicker">YOUR ACCOUNT-OWNED CATEGORIES</span><h1>Product categories</h1><p class="page-lede">Categories are private to your account. Deleting a category keeps its products and unassigns them.</p></div><a class="button button-secondary" th:href="@{/portal/products}">My products <span>→</span></a></section>
+    <section class="page-title-row"><div><span class="kicker">YOUR ACCOUNT-OWNED CATEGORIES</span><h1>Product categories</h1><p class="page-lede">Categories are private to your account. Hiding one leaves its products untouched; deleting one keeps the products and unassigns them.</p></div><a class="button button-secondary" th:href="@{/portal/products}">My products <span>→</span></a></section>
 
     <div class="category-layout">
         <section class="panel form-panel category-create-panel">
@@ -17,19 +17,26 @@
         </section>
 
         <section class="panel list-panel category-list-panel">
-            <div class="panel-heading"><div><span class="kicker">YOUR CATEGORIES</span><h2>Manage categories <span class="heading-count" th:text="${#lists.size(categories)}">0</span></h2></div></div>
+            <div class="panel-heading"><div><span class="kicker">YOUR CATEGORIES</span><h2>Manage categories <span class="heading-count" th:text="${totalCategories}">0</span></h2></div></div>
+            <form class="filter-panel filter-panel-inline" method="get" th:action="@{/portal/categories}"><div class="field field-inline-search"><label for="cat-q">Search categories</label><input id="cat-q" name="q" th:value="${q}" maxlength="120" placeholder="Name contains"></div><div class="form-actions"><a class="button button-quiet button-small" th:href="@{/portal/categories}">Reset</a><button class="button button-secondary button-small" type="submit">Apply</button></div></form>
             <div class="category-management-list">
                 <article class="category-management-row" th:each="category : ${categories}">
                     <form class="category-edit-form" th:action="@{/portal/categories/{id}(id=${category.id})}" method="post">
                         <div class="field"><label th:for="${'category-name-' + category.id}">Category name</label><input th:id="${'category-name-' + category.id}" name="name" maxlength="120" required th:value="${category.name}"></div>
                         <div class="field"><label th:for="${'category-description-' + category.id}">Description</label><input th:id="${'category-description-' + category.id}" name="description" maxlength="300" th:value="${category.description}"></div>
-                        <div class="category-row-actions"><span class="category-usage" th:text="${productCounts[category.id] != null ? productCounts[category.id] + ' products' : '0 products'}">0 products</span><button class="button button-secondary button-small" type="submit">Save</button></div>
+                        <div class="category-row-actions"><span class="status-pill" th:classappend="${category.active ? ' status-paid' : ' status-draft'}" th:text="${category.active ? 'ACTIVE' : 'HIDDEN'}">ACTIVE</span><span class="category-usage" th:text="${productCounts[category.id] != null ? productCounts[category.id] + ' products' : '0 products'}">0 products</span><button class="button button-secondary button-small" type="submit">Save</button></div>
                     </form>
-                    <form th:action="@{/portal/categories/{id}/delete(id=${category.id})}" method="post" onsubmit="return confirm('Delete this category? Its products will stay in your catalogue.')"><button class="row-arrow row-danger" type="submit" aria-label="Delete category">×</button></form>
+                    <div class="category-row-tools">
+                        <form th:action="@{/portal/categories/{id}/toggle(id=${category.id})}" method="post"><button class="row-arrow" type="submit" th:attr="aria-label=${category.active ? 'Hide category' : 'Show category'}" th:text="${category.active ? '−' : '+'}">−</button></form>
+                        <form th:action="@{/portal/categories/{id}/delete(id=${category.id})}" method="post" data-confirm-title="Delete this category?" data-confirm-text="Its products stay in your catalogue and keep their prices and tax rates."><button class="row-arrow row-danger" type="submit" aria-label="Delete category">×</button></form>
+                    </div>
                 </article>
-                <div class="empty-state" th:if="${#lists.isEmpty(categories)}"><span class="empty-icon">▧</span><h2>Make products easier to find.</h2><p>Add a category, then assign it to your products.</p></div>
+                <div class="empty-state" th:if="${page != null and page.empty}"><span class="empty-icon">▧</span><h2 th:text="${activeFilters} ? 'No category matches that search.' : 'Make products easier to find.'">Nothing here</h2><p th:text="${activeFilters} ? 'Clear the search to see all of your categories.' : 'Add a category, then assign it to your products.'">Nothing</p><a class="button button-quiet button-small" th:if="${activeFilters}" th:href="@{/portal/categories}">Clear search</a></div>
             </div>
+            <div th:replace="~{fragments/components :: pagination(${page}, '/portal/categories', ${currentQuery})}"></div>
         </section>
     </div>
     <footer class="page-footer"><span>Your categories are never shared with another customer.</span><a th:href="@{/portal}">Back to my workspace ↗</a></footer>
-</div></main></div></body></html>
+</div></main></div><div th:replace="~{fragments/components :: confirmHost}"></div>
+</body>
+</html>

@@ -48,6 +48,9 @@ public class CatalogProduct implements Serializable {
     private ProductCategory category;
     @Column(length = 500)
     private String description;
+    /** What the item is sold in, e.g. HOUR or PIECE. Free text, capped by the column. */
+    @Column(length = 24)
+    private String unit;
     @Column(name = "unit_price", nullable = false, precision = 14, scale = 2)
     private BigDecimal unitPrice;
     @Column(name = "tax_rate", nullable = false, precision = 5, scale = 2)
@@ -88,6 +91,8 @@ public class CatalogProduct implements Serializable {
     public void setCategory(ProductCategory value) { category = value; }
     /** Kept for templates and API responses; the category is now a managed record. */
     public String getCategoryName() { return category == null ? null : category.getName(); }
+    public String getUnit() { return unit; }
+    public void setUnit(String v) { unit = v; }
     public String getDescription() { return description; }
     public void setDescription(String value) { description = value; }
     public BigDecimal getUnitPrice() { return unitPrice; }

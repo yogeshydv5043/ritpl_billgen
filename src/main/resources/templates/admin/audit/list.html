@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Audit management')}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Audit management</span>
+                    <h1>Audit type registry</h1>
+                    <p class="page-lede">A definition says which event is tracked, which plans may track it, how often and for how long. Recorded history is stored separately and is append-only — nothing on this page edits or removes a log entry.</p>
+                </div>
+                <div class="button-group">
+                    <a class="button button-quiet" th:href="@{/admin/audit}">Audit history</a>
+                    <a class="button button-primary" th:href="@{/admin/audit-types/new}"><span class="button-plus" aria-hidden="true">＋</span> New audit type</a>
+                </div>
+            </section>
+
+            <div class="stat-row">
+                <div class="stat"><b th:text="${#lists.size(rows)}">0</b><span>In view</span></div>
+                <div class="stat is-ok"><b th:text="${activeCount}">0</b><span>Tracking active</span></div>
+            </div>
+
+            <section class="panel list-panel">
+                <div class="list-toolbar">
+                    <div class="list-count"><span class="count-dot" aria-hidden="true"></span>
+                        <strong th:text="${#lists.size(rows)}">0</strong> tracked event definition(s)</div>
+                    <form class="filter-bar" id="type-filters" method="get" th:action="@{/admin/audit-types}">
+                        <div class="filter-field">
+                            <label for="cat-filter">Category</label>
+                            <select id="cat-filter" name="category">
+                                <option value="">Every category</option>
+                                <option th:each="category : ${categories}" th:value="${category}" th:text="${category.label}"
+                                        th:selected="${filterCategory != null and filterCategory == category.name()}">Security</option>
+                            </select>
+                        </div>
+                        <div class="filter-field">
+                            <label for="state-filter">Tracking</label>
+                            <select id="state-filter" name="state">
+                                <option value="">Any state</option>
+                                <option value="active" th:selected="${filterState == 'active'}">Active only</option>
+                                <option value="paused" th:selected="${filterState == 'paused'}">Paused only</option>
+                            </select>
+                        </div>
+                        <div class="filter-actions">
+                            <button class="button button-primary button-small" type="submit">Apply</button>
+                            <a class="button button-quiet button-small" th:href="@{/admin/audit-types}">Reset</a>
+                        </div>
+                    </form>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th scope="col">ID</th><th scope="col">Name</th><th scope="col">Description</th>
+                            <th scope="col">Category</th><th scope="col">Matches</th><th scope="col">Plans</th>
+                            <th scope="col">Limit</th><th scope="col">Limit period</th><th scope="col">Retention</th>
+                            <th scope="col">Alert at</th><th scope="col">Events recorded</th><th scope="col">Status</th>
+                            <th scope="col">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="row : ${rows}" th:with="type=${row.type}">
+                            <td><span class="table-id" th:text="'#' + ${type.id}">#0</span></td>
+                            <td><a class="table-primary" th:href="@{/admin/audit-types/{id}/usage(id=${type.id})}" th:text="${type.name}">Login</a>
+                                <span class="table-secondary" th:text="${type.code}">LOGIN</span>
+                                <span class="table-secondary" th:if="${type.systemDefined}">system-defined</span></td>
+                            <td class="wrap-cell" th:text="${type.description != null ? type.description : '—'}">—</td>
+                            <td><span class="badge badge-muted" th:text="${type.eventCategory.label}">Security</span></td>
+                            <td><code th:text="${type.action}">LOGIN</code>
+                                <span class="table-secondary" th:if="${type.resourceType != null}" th:text="${type.resourceType}">Session</span></td>
+                            <td><span class="badge badge-info" th:text="${row.planCount} + ' plan(s)'">0</span></td>
+                            <td th:text="${type.hasQuota() ? type.usageLimit + ' events' : 'Not capped'}">—</td>
+                            <td><span th:text="${type.limitPeriod.label}">Daily</span>
+                                <span class="table-secondary" th:if="${type.limitPeriod.name() == 'CUSTOM' and type.customPeriodDays != null}"
+                                      th:text="${type.customPeriodDays} + ' day window'">window</span></td>
+                            <td th:text="${type.retentionDays} + ' days'">730 days</td>
+                            <td th:text="${type.alertThresholdPercent} + '%'">80%</td>
+                            <td><strong th:text="${row.recordCount}">0</strong></td>
+                            <td><span class="badge" th:classappend="${type.active ? 'status-active' : 'status-paused'}"
+                                     th:text="${type.active ? 'Tracking' : 'Paused'}">Tracking</span></td>
+                            <td>
+                                <div class="row-actions">
+                                    <a class="row-arrow" th:href="@{/admin/audit-types/{id}/usage(id=${type.id})}" title="Usage"
+                                       th:attr="aria-label='Usage for ' + ${type.name}">◔</a>
+                                    <a class="button button-quiet button-small" th:href="@{/admin/audit-types/{id}/edit(id=${type.id})}">Edit</a>
+                                    <form method="post" th:action="@{/admin/audit-types/{id}/active(id=${type.id})}"
+                                          th:attr="data-confirm-title=${type.active ? 'Pause this audit type?' : 'Resume tracking?'},
+                                                   data-confirm-text=${type.active
+                                                       ? 'New events of this type stop being recorded; everything already recorded stays readable and keeps its own retention date.'
+                                                       : 'Events matching this definition are recorded again from the next one onwards.'},
+                                                   data-confirm-check=${type.active ? 'I know matching events will not be recorded while it is paused.' : ''}">
+                                        <input type="hidden" name="active" th:value="${type.active ? 'false' : 'true'}">
+                                        <button class="button button-quiet button-small" type="submit" th:text="${type.active ? 'Pause' : 'Resume'}">Pause</button>
+                                    </form>
+                                    <form method="post" th:action="@{/admin/audit-types/{id}/delete(id=${type.id})}"
+                                          th:attr="data-confirm-title=${'Retire ' + type.name + '?'},
+                                                   data-confirm-text='The definition is soft-deleted so recorded history keeps resolving to it, and no new events are matched. Retiring is refused while a plan still permits it.',
+                                                   data-confirm-check='I understand history is preserved and not deleted.'">
+                                        <button class="button button-danger button-small" type="submit">Retire</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(rows)}"><td colspan="13">
+                            <div th:replace="~{fragments/components :: empty('◈', 'No audit types registered', 'Create a definition to start tracking an event: pick its category, the action it matches, one limit period and a retention window.', 'New audit type', '/admin/audit-types/new')}"></div>
+                        </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading"><div><span class="kicker">SEPARATION OF CONCERNS</span><h2>Definition, quota and history</h2></div></div>
+                <div class="panel-body">
+                    <p class="table-caption">These three things are deliberately independent — editing one never rewrites another:</p>
+                    <ul class="modal-list">
+                        <li><strong>Audit event definition</strong><span>This registry: what counts as an event and which plans may produce it.</span></li>
+                        <li><strong>Usage quota</strong><span>Per-account event ceiling inside one window — the plan caps plus this type's own limit, whichever is stricter.</span></li>
+                        <li><strong>Audit history</strong><span>Immutable rows in <code>audit_records</code>, protected by an append-only trigger; the retention purge is the only DELETE permitted and only in a session that declares its cutoff.</span></li>
+                    </ul>
+                </div>
+            </section>
+
+            <footer class="page-footer">
+                <span>Retrying a limit change takes effect on the next recorded event; it never re-reads history.</span>
+                <a th:href="@{/admin/plans}">Plan quotas <span aria-hidden="true">→</span></a>
+            </footer>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

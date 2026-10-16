@@ -1,9 +1,11 @@
 package com.ritpl.billgen.entity;
 
 import java.time.LocalDateTime;
-
+import java.util.Base64;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -13,14 +15,10 @@ import jakarta.persistence.Table;
 @Entity
 @Table(name = "customers")
 public class Customer {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    @Column(name = "company_name", nullable = false, length = 160)
-    private String companyName;
-    @Column(name = "contact_name", nullable = false, length = 120)
-    private String contactName;
-    @Column(nullable = false, unique = true, length = 190)
-    private String email;
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @Column(name = "company_name", nullable = false, length = 160) private String companyName;
+    @Column(name = "contact_name", nullable = false, length = 120) private String contactName;
+    @Column(nullable = false, unique = true, length = 190) private String email;
     @Column(length = 40) private String phone;
     @Column(name = "billing_address", length = 255) private String billingAddress;
     @Column(length = 80) private String city;
@@ -28,21 +26,26 @@ public class Customer {
     @Column(name = "postal_code", length = 24) private String postalCode;
     @Column(nullable = false, length = 80) private String country = "India";
     @Column(length = 24) private String gstin;
-    /** Internal migration-owned account used for records created before tenant isolation existed. */
-    @Column(name = "system_account", nullable = false)
-    private boolean systemAccount = false;
+    @Column(name = "logo_data", columnDefinition = "bytea") private byte[] logoData;
+    @Column(name = "logo_content_type", length = 40) private String logoContentType;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 16)
+    private AccountStatus status = AccountStatus.ACTIVE;
+    @Column(name = "deleted_at") private java.time.Instant deletedAt;
+    @Column(name = "deleted_by", length = 190) private String deletedBy;
+    @Column(name = "deletion_reason", length = 400) private String deletionReason;
+    @Column(name = "system_account", nullable = false) private boolean systemAccount = false;
     @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
 
     protected Customer() { }
-    public Customer(String companyName, String contactName, String email) {
-        this.companyName = companyName;
-        this.contactName = contactName;
-        this.email = email;
-    }
+    public Customer(String companyName, String contactName, String email) { this.companyName = companyName; this.contactName = contactName; this.email = email; }
     @PrePersist void onCreate() { if (createdAt == null) createdAt = LocalDateTime.now(); }
     public String getFullAddress() {
         return java.util.stream.Stream.of(billingAddress, city, state, postalCode, country)
                 .filter(v -> v != null && !v.isBlank()).collect(java.util.stream.Collectors.joining(", "));
+    }
+    public String getLogoDataUrl() {
+        return logoData == null || logoData.length == 0 || logoContentType == null ? null
+                : "data:" + logoContentType + ";base64," + Base64.getEncoder().encodeToString(logoData);
     }
     public Long getId() { return id; }
     public String getCompanyName() { return companyName; }
@@ -65,5 +68,20 @@ public class Customer {
     public void setCountry(String v) { country = v; }
     public String getGstin() { return gstin; }
     public void setGstin(String v) { gstin = v; }
+    public byte[] getLogoData() { return logoData == null ? null : logoData.clone(); }
+    public void setLogoData(byte[] v) { logoData = v == null ? null : v.clone(); }
+    public String getLogoContentType() { return logoContentType; }
+    public void setLogoContentType(String v) { logoContentType = v; }
+    public boolean isSystemAccount() { return systemAccount; }
+    public AccountStatus getStatus() { return status == null ? AccountStatus.ACTIVE : status; }
+    public void setStatus(AccountStatus v) { status = v == null ? AccountStatus.ACTIVE : v; }
+    public boolean isActiveAccount() { return getStatus() == AccountStatus.ACTIVE; }
+    public java.time.Instant getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(java.time.Instant v) { deletedAt = v; }
+    public String getDeletedBy() { return deletedBy; }
+    public void setDeletedBy(String v) { deletedBy = v; }
+    public String getDeletionReason() { return deletionReason; }
+    public void setDeletionReason(String v) { deletionReason = v; }
+    public boolean isDeleted() { return deletedAt != null; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

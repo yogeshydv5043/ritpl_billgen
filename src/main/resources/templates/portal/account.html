@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Profile and security')}"></head>
+<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
+<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content page-content-narrow">
+    <div th:replace="~{fragments/layout :: flash}"></div>
+    <section class="page-title-row compact-title"><div><span class="kicker">YOUR LOGIN</span><h1>Profile and security</h1><p class="page-lede">The details that identify this account, and the credentials that protect it. Everything here applies to your company only.</p></div><a class="button button-secondary" th:href="@{/portal/company}">Edit company profile <span>→</span></a></section>
+
+    <section class="panel form-panel">
+        <div class="panel-heading"><div><span class="kicker">PROFILE</span><h2>What your invoices print</h2></div><span class="status-pill" th:classappend="${customer.activeAccount ? ' status-paid' : ' status-cancelled'}" th:text="${#strings.toUpperCase(customer.status.label)}">ACTIVE</span></div>
+        <dl class="grid-kv">
+            <dt>Company name</dt><dd th:text="${customer.companyName}">Northstar Studio</dd>
+            <dt>Contact name</dt><dd th:text="${customer.contactName}">Priya</dd>
+            <dt>Sign-in email</dt><dd th:text="${email}">hello@company.com</dd>
+            <dt>Company email</dt><dd th:text="${customer.email}">billing@company.com</dd>
+            <dt>Phone</dt><dd th:text="${customer.phone != null and !customer.phone.isBlank() ? customer.phone : 'Not provided'}">+91</dd>
+            <dt>Address</dt><dd th:text="${customer.fullAddress != null and !customer.fullAddress.isBlank() ? customer.fullAddress : 'Not provided'}">Pune</dd>
+            <dt>GSTIN / tax ID</dt><dd th:text="${customer.gstin != null and !customer.gstin.isBlank() ? customer.gstin : 'Not provided'}">27ABCDE1234F1Z5</dd>
+            <dt>Logo</dt><dd><span th:if="${customer.logoDataUrl != null}">Saved on your invoice header</span><span th:unless="${customer.logoDataUrl != null}">No logo uploaded</span> · <a th:href="@{/portal/company}">change</a></dd>
+        </dl>
+        <p class="form-footnote"><span>✳</span> The sign-in address is your account's external key and is changed by an administrator; the company email above is what appears on documents.</p>
+    </section>
+
+    <section class="panel form-panel">
+        <div class="panel-heading"><div><span class="kicker">ACCOUNT SECURITY</span><h2>Change your password</h2></div></div>
+        <form th:action="@{/portal/account/password}" method="post" novalidate>
+            <div class="form-grid form-grid-two">
+                <div class="field field-full"><label for="currentPassword">Current password <span class="required">*</span></label><input id="currentPassword" name="currentPassword" type="password" autocomplete="current-password" required><small class="field-help">Your identity is re-checked by the server; the old password is never stored or shown.</small></div>
+                <div class="field"><label for="newPassword">New password <span class="required">*</span></label><input id="newPassword" name="newPassword" type="password" autocomplete="new-password" th:attr="minlength=${minPasswordLength}" required><small class="field-help" th:text="'At least ' + ${minPasswordLength} + ' characters.'">At least 8 characters.</small></div>
+                <div class="field"><label for="confirmPassword">Repeat new password <span class="required">*</span></label><input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required><small class="field-help">Both entries must match exactly.</small></div>
+            </div>
+            <div class="form-actions"><button class="button button-primary" type="submit">Update password <span>→</span></button><span class="toolbar-note">A failed attempt is recorded in your audit history.</span></div>
+        </form>
+    </section>
+
+    <section class="panel form-panel">
+        <div class="panel-heading"><div><span class="kicker">SESSION AND ACCESS</span><h2>What protects this account</h2></div></div>
+        <ul class="security-list">
+            <li><strong>One tenant per login</strong><span>Every list, form and export re-checks that the record belongs to <span th:text="${customer.companyName}">your company</span>; a foreign id is refused, not filtered.</span></li>
+            <li><strong>Write access by role</strong><span>Administrator links into your data are read-only; only this account can change its own records.</span></li>
+            <li><th:block th:if="${subscription != null}"><strong>Plan entitlements</strong><span>Templates, custom-design slots and the invoice allowance are enforced on the server for the active term (<span th:text="${subscription.endsOn}">date</span>).</span></th:block><th:block th:unless="${subscription != null}"><strong>Plan entitlements</strong><span>No active term, so invoicing and custom templates are blocked until a plan is chosen.</span></th:block></li>
+            <li><strong>Audit history</strong><span>Sign-ins, edits, exports and failures are appended for your account; you can browse them but never change them.</span></li>
+        </ul>
+        <div class="form-actions"><a class="button button-secondary button-small" th:href="@{/portal/audit}">View my audit history <span>→</span></a><a class="button button-quiet button-small" th:href="@{/portal/settings}">Alert preferences <span>→</span></a></div>
+    </section>
+    <footer class="page-footer"><span>Passwords and payment credentials are never written into an audit record.</span><a th:href="@{/portal}">Back to my workspace ↗</a></footer>
+</div></main></div></body></html>

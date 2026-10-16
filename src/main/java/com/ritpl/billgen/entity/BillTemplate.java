@@ -40,6 +40,24 @@ public class BillTemplate implements Serializable {
     private boolean active = true;
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
+    /** Optional copy rendered by the layout. Snapshotted onto the invoice when it is generated. */
+    @Column(name = "header_text", length = 500)
+    private String headerText;
+    @Column(name = "footer_text", length = 500)
+    private String footerText;
+    @Column(name = "payment_terms", length = 500)
+    private String paymentTerms;
+    @Column(name = "terms_and_conditions", length = 2000)
+    private String termsAndConditions;
+    /** Bumped on every save. An invoice stores the version it was produced with. */
+    @Column(nullable = false)
+    private int version = 1;
+    @Column(name = "deleted_at")
+    private java.time.Instant deletedAt;
+    @Column(name = "deleted_by", length = 190)
+    private String deletedBy;
+    @Column(name = "updated_by", length = 190)
+    private String updatedBy;
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
     @Column(name = "updated_at", nullable = false)
@@ -73,6 +91,24 @@ public class BillTemplate implements Serializable {
     public void setActive(boolean value) { active = value; }
     public int getSortOrder() { return sortOrder; }
     public void setSortOrder(int value) { sortOrder = value; }
+    public String getHeaderText() { return headerText; }
+    public void setHeaderText(String value) { headerText = value; }
+    public String getFooterText() { return footerText; }
+    public void setFooterText(String value) { footerText = value; }
+    public String getPaymentTerms() { return paymentTerms; }
+    public void setPaymentTerms(String value) { paymentTerms = value; }
+    public String getTermsAndConditions() { return termsAndConditions; }
+    public void setTermsAndConditions(String value) { termsAndConditions = value; }
+    public int getVersion() { return version; }
+    public void setVersion(int value) { version = Math.max(1, value); }
+    public void bumpVersion() { version = Math.max(1, version) + 1; }
+    public java.time.Instant getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(java.time.Instant value) { deletedAt = value; }
+    public String getDeletedBy() { return deletedBy; }
+    public void setDeletedBy(String value) { deletedBy = value; }
+    public boolean isDeleted() { return deletedAt != null; }
+    public String getUpdatedBy() { return updatedBy; }
+    public void setUpdatedBy(String value) { updatedBy = value; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     @Override public String toString() { return name; }

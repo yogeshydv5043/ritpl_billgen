@@ -7,12 +7,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import com.ritpl.billgen.security.AppUserPrincipal;
 import com.ritpl.billgen.security.TenantScope;
-import com.ritpl.billgen.service.AccountStatsService;
-import com.ritpl.billgen.service.CatalogService;
+import com.ritpl.billgen.service.CustomerDashboardService;
 import com.ritpl.billgen.service.CustomerService;
-import com.ritpl.billgen.service.InvoiceService;
-import com.ritpl.billgen.service.ProductCategoryService;
-import com.ritpl.billgen.service.SubscriptionService;
+import com.ritpl.billgen.service.SubscriptionExpiryNotificationService;
 
 /**
  * Home of the customer portal. Every query on this screen is pinned to the signed-in account, so
@@ -22,16 +19,12 @@ import com.ritpl.billgen.service.SubscriptionService;
 @RequestMapping("/portal")
 public class PortalController {
     private final CustomerService customers;
-    private final AccountStatsService accountStats;
-    private final InvoiceService invoices;
-    private final CatalogService catalog;
-    private final ProductCategoryService categories;
-    private final SubscriptionService subscriptions;
+    private final SubscriptionExpiryNotificationService expiryNotifications;
+    private final CustomerDashboardService dashboard;
 
-    public PortalController(CustomerService customers, AccountStatsService accountStats, InvoiceService invoices,
-            CatalogService catalog, ProductCategoryService categories, SubscriptionService subscriptions) {
-        this.customers = customers; this.accountStats = accountStats; this.invoices = invoices;
-        this.catalog = catalog; this.categories = categories; this.subscriptions = subscriptions;
+    public PortalController(CustomerService customers, SubscriptionExpiryNotificationService expiryNotifications,
+            CustomerDashboardService dashboard) {
+        this.customers = customers; this.expiryNotifications = expiryNotifications; this.dashboard = dashboard;
     }
 
     @GetMapping
@@ -39,12 +32,14 @@ public class PortalController {
         TenantScope scope = TenantScope.from(principal);
         long customerId = scope.requireCustomerId();
         model.addAttribute("customer", customers.findById(scope, customerId));
-        model.addAttribute("stats", accountStats.findOne(scope, customerId));
-        model.addAttribute("subscription", subscriptions.findActiveSubscription(scope, customerId).orElse(null));
-        model.addAttribute("templates", subscriptions.accessibleTemplates(scope));
-        model.addAttribute("invoices", invoices.findForCustomer(scope, customerId));
-        model.addAttribute("products", catalog.findActive(scope));
-        model.addAttribute("categories", categories.findAll(scope));
+        model.addAttribute("notifications", expiryNotifications.findForCustomer(scope));
+        // Every card and list below is a live query over this account's own rows, and a dashboard that
+        // cannot be computed says so instead of showing a placeholder figure.
+        try {
+            model.addAttribute("dashboard", dashboard.load(scope, customerId));
+        } catch (RuntimeException e) {
+            model.addAttribute("dashboardError", "Live figures could not be read: " + e.getMessage());
+        }
         return "portal/home";
     }
 }

@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: maven
+
+      - name: Compile
+        shell: bash
+        run: mvn -B -ntp -DskipTests compile 2>&1 | tee /tmp/mvn-compile.log
+
+      - name: Run tests
+        shell: bash
+        run: mvn -B -ntp test 2>&1 | tee /tmp/mvn-test.log
+
+      - name: Package application
+        shell: bash
+        run: mvn -B -ntp -DskipTests package 2>&1 | tee /tmp/mvn-package.log
+
+      - name: Summarise test results
+        if: always()
+        run: |
+          echo "### Test results" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          totals="0 0 0 0"
+          if [ -d target/surefire-reports ]; then
+            grep -h "Tests run" target/surefire-reports/*.txt >> "$GITHUB_STEP_SUMMARY" \
+              || echo "No Surefire summary files were produced." >> "$GITHUB_STEP_SUMMARY"
+            totals=$(grep -hoE "Tests run: [0-9]+, Failures: [0-9]+, Errors: [0-9]+, Skipped: [0-9]+" target/surefire-reports/*.txt \
+              | sed -E 's/[^0-9]+/ /g' \
+              | awk '{ t+=$1; f+=$2; e+=$3; s+=$4 } END { printf "%d %d %d %d", t, f, e, s }')
+          else
+            echo "No test reports were produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          set -- $totals
+          echo "::notice title=Automated tests::Tests run: $1, Failures: $2, Errors: $3, Skipped: $4"
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          if-no-files-found: ignore
+
+      - name: Report failures on the pull request
+        if: failure() || cancelled()
+        uses: actions/github-script@v7
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const chunks = [];
+            for (const log of ['/tmp/mvn-compile.log', '/tmp/mvn-test.log', '/tmp/mvn-package.log']) {
+              if (fs.existsSync(log)) {
+                const text = fs.readFileSync(log, 'utf8').split('\n').filter(line =>
+                  /ERROR|BUILD|Tests run|\.java:\[|Failed to execute|Caused by|symbol:|location:|required:|found:/.test(line)).slice(-160).join('\n');
+                if (text.trim()) chunks.push(`#### ${log}\n\n\`\`\`\n${text}\n\`\`\``);
+              }
+            }
+            const dir = 'target/surefire-reports';
+            if (fs.existsSync(dir)) {
+              const files = fs.readdirSync(dir).filter(f => f.endsWith('.txt'));
+              if (files.length > 0) {
+                chunks.push(files.map(f => `#### ${f}\n\n\`\`\`\n${fs.readFileSync(`${dir}/${f}`, 'utf8')}\n\`\`\``).join('\n\n'));
+              }
+            }
+            let details = chunks.length > 0 ? chunks.join('\n\n')
+              : 'No Maven output or Surefire reports were captured.';
+            if (details.length > 50000) details = details.slice(0, 50000) + '\n\n… truncated';
+            const body = [`### CI failed on \`${context.ref.replace('refs/heads/', '')}\``,
+                          '',
+                          `Run: ${process.env.RUN_URL}`,
+                          '',
+                          details].join('\n');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            let number = context.issue && context.issue.number;
+            if (!number) {
+              const head = `${owner}:${context.ref.replace('refs/heads/', '')}`;
+              const open = await github.rest.pulls.list({ owner, repo, head, state: 'open', per_page: 1 });
+              if (open.data.length === 0) { core.info('No open pull request for this branch; skipping comment.'); return; }
+              number = open.data[0].number;
+            }
+            await github.rest.issues.createComment({ owner, repo, issue_number: number, body });

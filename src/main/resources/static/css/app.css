@@ -155,6 +155,11 @@ a.table-primary:hover, .customer-link:hover, .table-email:hover { color: #6049dc
 .status-sent { color: #6952d7; background: #f0edff; }
 .status-draft { color: #85869a; background: #f1f1f5; }
 .status-large { min-height: 27px; padding: 4px 11px; font-size: 9px; }
+/* Two states had no colour of their own, so their pills rendered as plain grey text while every
+   other status was a tinted badge: an account that is soft-deleted, and a job that went wrong for
+   only some of its recipients. */
+.status-deleted { color: #7d4a6a; background: #f7eef5; }
+.status-partially-failed { color: #8a6a1f; background: #fffaef; }
 .row-arrow { display: inline-grid; width: 27px; height: 27px; place-items: center; border: 1px solid #ececf2; border-radius: 8px; color: #8e8da0; background: #fff; font-size: 13px; }
 .row-arrow:hover { border-color: #d6cffb; color: #634bdf; background: #faf9ff; }
 .dashboard-side { display: grid; gap: 16px; }
@@ -229,6 +234,27 @@ a.table-primary:hover, .customer-link:hover, .table-email:hover { color: #6049dc
 .invoice-summary-strip strong { margin-top: 3px; color: #3c3c52; font-size: 15px; font-weight: 730; letter-spacing: -.35px; }
 .summary-currency { position: absolute; right: 9%; color: #a8a7b6; font-size: 10px; }
 .toolbar-note { color: #a0a0ae; font-size: 10px; }
+/* A note that repeats a rule the customer can also change: it belongs to the toolbar it sits in,
+   so it is separated from the note in front of it instead of running into it. */
+.retention-note { padding-left: 11px; border-left: 1px solid #ebebf1; }
+
+/* Filter rows. `.panel` carries the frame only, so these forms had to supply their own padding -
+   without it every control sat flush against the panel border. */
+.filter-panel { display: grid; gap: 12px; padding: 15px 18px 17px; }
+.filter-panel .form-grid { gap: 13px 12px; }
+.filter-panel-inline { grid-template-columns: minmax(210px, 1fr) auto; align-items: end; padding: 13px 16px; }
+.filter-panel-inline .form-actions { margin: 0; padding: 0; border: 0; }
+@media (max-width: 640px) { .filter-panel, .filter-panel-inline { grid-template-columns: minmax(0, 1fr); } }
+
+/* The audit list paginates with its own prev/next bar: it reads as a toolbar footer, matching the
+   bar the shared pagination fragment produces on every other list. */
+.pagination-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-top: 1px solid #efeff4; color: #9b9bab; font-size: 10px; }
+
+/* Dashboard notices: the message and its own action share a line, and each notice is separated
+   from the next inside the single panel they all live in. */
+.notification-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 9px 16px; padding: 9px 0; border-top: 1px solid rgba(126,110,180,.15); }
+.notification-row:first-child { padding-top: 1px; border-top: 0; }
+.notification-row p { margin: 0; font-size: 11px; }
 
 /* Customer profiles and forms */
 .customer-profile-head { display: flex; align-items: center; justify-content: space-between; gap: 22px; margin: 0 0 25px; padding: 24px 25px; border: 1px solid #ebe9f5; border-radius: 17px; background: linear-gradient(110deg, #fff 53%, #f8f6ff); }
@@ -257,7 +283,13 @@ a.table-primary:hover, .customer-link:hover, .table-email:hover { color: #6049dc
 .form-intro h2 { margin: 0; color: #343449; font-size: 15px; font-weight: 700; letter-spacing: -.25px; }
 .form-intro p { margin: 3px 0 0; color: #9a9aaa; font-size: 10px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px 17px; }
+.form-grid-two { grid-template-columns: repeat(2, minmax(0,1fr)); }
 .form-grid-three { grid-template-columns: repeat(3, minmax(0,1fr)); }
+/* Nothing above these grids knew how wide the screen was, so a phone was handed three columns of
+   squeezed inputs - a date field at 100px is not usable. The wide layouts give up one column at a
+   time rather than collapsing early on a desktop. */
+@media (max-width: 1020px) { .form-grid-three { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 640px) { .form-grid, .form-grid-two, .form-grid-three { grid-template-columns: minmax(0, 1fr); } }
 .field { display: flex; min-width: 0; flex-direction: column; gap: 7px; }
 .field-full { grid-column: 1 / -1; }
 .field > label:not(.check-field) { color: #55556a; font-size: 10px; font-weight: 680; }
@@ -275,6 +307,8 @@ a.table-primary:hover, .customer-link:hover, .table-email:hover { color: #6049dc
 .form-actions { display: flex; justify-content: flex-end; gap: 9px; margin: 27px 0 0; padding-top: 18px; border-top: 1px solid #efeff4; }
 .global-errors { margin-top: 17px; padding: 10px 13px; border: 1px solid #f0cdce; border-radius: 9px; color: #a64b54; background: #fff7f7; font-size: 10px; }
 .global-errors p { margin: 2px 0; }
+/* A form that leads with its complaints should not push them away from its own fields. */
+.stack-form > .global-errors { margin-top: 0; margin-bottom: 4px; }
 .form-footnote { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 17px 0; color: #a3a2b2; font-size: 9px; }
 .form-footnote span { color: #8d79ec; font-size: 13px; }
 .check-field { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
@@ -533,6 +567,9 @@ a.table-primary:hover, .customer-link:hover, .table-email:hover { color: #6049dc
 .plan-limits { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid #f0eff4; border-bottom: 1px solid #f0eff4; color: #838394; font-size: 8px; }
 .plan-limits span::before { margin-right: 7px; color: #826ce7; content: "✓"; font-weight: 800; }
 .plan-limits b { color: #505066; }
+/* A `<br>` that only makes sense on a wide screen: on a phone it breaks a sentence in half. */
+.desktop-break { display: inline; }
+@media (max-width: 720px) { .desktop-break { display: none; } }
 .plan-features { padding-top: 13px; }
 .plan-features .kicker { font-size: 7px; }
 .plan-features ul { display: grid; gap: 8px; margin: 11px 0 0; padding: 0; list-style: none; }
@@ -896,3 +933,202 @@ a.table-primary:hover, .customer-link:hover, .table-email:hover { color: #6049dc
   .active-plan-summary { align-items: flex-start; flex-wrap: wrap; }
   .active-plan-summary > .status-pill { margin: 0 0 0 auto; }
 }
+
+/* ------------------------------------------------------------------ invoice presentation
+   The typeface, spacing and closing blocks a customer chose for its own template. They are read from
+   the snapshot on the invoice, so an issued document keeps the look it was delivered with. */
+.invoice-font-serif.print-sheet { font-family: Georgia, "Iowan Old Style", "Times New Roman", serif; }
+.invoice-font-mono.print-sheet { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: -0.1px; }
+.invoice-compact.print-sheet { font-size: 13px; }
+.invoice-compact.print-sheet .print-head, .invoice-compact.print-sheet .print-parties { margin-bottom: 10px; }
+.invoice-compact.print-sheet .print-table th, .invoice-compact.print-sheet .print-table td { padding-top: 4px; padding-bottom: 4px; }
+.print-blocks { display: grid; gap: 14px; margin-top: 20px; }
+.print-block { border-left: 2px solid var(--template-accent, #c7d2fe); padding: 2px 0 2px 12px; }
+.print-block p { margin: 4px 0 0; white-space: pre-line; color: #4b4a63; }
+.print-signature { display: flex; flex-direction: column; gap: 6px; width: min(280px, 60%); margin-top: 34px; font-size: 12px; color: #6b6a80; }
+.print-signature .rule { display: block; border-bottom: 1px solid #b9b8c9; height: 26px; }
+@media print {
+  .invoice-compact.print-sheet { font-size: 11.5px; }
+  .print-signature { margin-top: 22px; }
+}
+
+/* ── customer panel: dashboard, filters, preview ───────────────────────────────────────────────
+   Shared vocabulary for the portal pages. Colours come from the existing tokens so a card cannot
+   look different on one screen than it does on the next. */
+.notice-warning { border-color: #f3e0bd; background: #fffaef; color: #8a6a1f; }
+.notice-warning strong { color: #6f5314; }
+.notice-warning a { color: #8a6a1f; font-weight: 700; }
+.metric-card.metric-warning { border-color: #f0d9a8; background: linear-gradient(180deg, #fffaf0, #fff); }
+.metric-card.metric-warning .metric-value { color: #9a6c14; }
+
+.activity-list { list-style: none; margin: 0; padding: 4px 0 2px; display: grid; gap: 2px; }
+.activity-list > li > a { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 10px; border-radius: 9px; color: inherit; text-decoration: none; }
+.activity-list > li > a:hover { background: #f7f6ff; }
+.activity-main { display: grid; gap: 2px; min-width: 0; }
+.activity-main strong { font-size: 12.5px; font-weight: 650; }
+.activity-main small { color: var(--ink-3); font-size: 10.5px; overflow-wrap: anywhere; }
+.activity-meta { display: grid; justify-items: end; gap: 3px; flex: 0 0 auto; }
+.activity-meta small { color: var(--ink-3); font-size: 9.5px; font-variant-numeric: tabular-nums; }
+
+.overdue-flag { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 5px;
+  background: #fff1f2; color: #a64b54; font-size: 8.5px; font-weight: 800; letter-spacing: .5px; }
+
+.quota-panel { margin-top: 17px; }
+.quota-note { margin: 9px 0 0; font-size: 11px; color: var(--ink-3); }
+.quota-note .quota-blocked { color: #a64b54; }
+.expiry-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+.security-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.security-list > li { display: grid; gap: 2px; padding: 11px 13px; border: 1px solid var(--line);
+  border-radius: 10px; background: #fbfaff; }
+.security-list strong { font-size: 12px; }
+.security-list span { font-size: 11px; color: var(--ink-3); }
+
+.prefix-preview { display: flex; align-items: center; gap: 9px; }
+.prefix-preview input { flex: 1 1 auto; min-width: 0; }
+.prefix-preview .currency-prefix { font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.filter-panel-inline { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; padding: 0; border: 0; background: none; }
+.filter-panel-inline .form-actions { margin: 0; }
+.field-inline-search { flex: 1 1 220px; min-width: 0; }
+.field-actions-inline { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.category-row-tools { display: flex; align-items: center; gap: 6px; align-self: center; }
+
+.sort-link { color: inherit; text-decoration: none; border-bottom: 1px dotted transparent; }
+.sort-link:hover { color: #6550d7; border-bottom-color: currentColor; }
+th[aria-sort="ascending"] .sort-link, th[aria-sort="descending"] .sort-link { color: #4c3bc4; font-weight: 800; }
+
+.preview-panel { margin-top: 16px; }
+.preview-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.preview-table th { text-align: left; font-weight: 600; color: var(--ink-3); padding: 7px 0; width: 45%; }
+.preview-table td { text-align: right; padding: 7px 0; font-variant-numeric: tabular-nums; }
+.preview-table .preview-total th, .preview-table .preview-total td { border-top: 1px solid var(--line);
+  padding-top: 11px; font-size: 14px; font-weight: 750; color: var(--ink); }
+.preview-allowance { margin: 10px 0 0; font-size: 11px; color: var(--ink-3); }
+.preview-blocked { margin: 8px 0 0; font-size: 11.5px; font-weight: 700; color: #a64b54; }
+.preview-note { margin: 8px 0 0; font-size: 10.5px; color: var(--ink-3); }
+
+.settings-form { display: grid; gap: 16px; }
+.button-danger { color: #a64b54; border-color: #f0d1d2; }
+.button-danger:hover { background: #fff4f4; color: #8d3a42; }
+.signature-rule { display: block; width: 168px; max-width: 60%; border-bottom: 1px solid var(--ink); margin-bottom: 6px; }
+.invoice-design-facts { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--line); display: grid; gap: 8px; }
+.design-note { margin: 0; font-size: 10.5px; color: var(--ink-3); }
+
+@media (max-width: 720px) {
+  .activity-list > li > a { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .activity-meta { justify-items: start; }
+  .expiry-banner { align-items: flex-start; }
+}
+
+/* Customer template gallery: a small paper preview, the design's own facts, then its actions. */
+.template-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); gap: 14px; padding: 4px 0 2px; }
+.template-card { display: grid; grid-template-rows: auto 1fr; min-width: 0; border: 1px solid #e8e7ef; border-radius: 14px; background: #fff; overflow: hidden; }
+.template-card:hover { border-color: #d9d3f8; box-shadow: 0 10px 26px -22px rgba(60, 48, 140, .55); }
+.template-preview { position: relative; display: grid; gap: 7px; padding: 16px 16px 20px; min-height: 118px;
+  background: repeating-linear-gradient(180deg, #fbfbfe 0 26px, #f6f6fb 26px 27px); border-bottom: 1px solid #efeff4; }
+.template-preview-bar { display: block; width: 46%; height: 9px; border-radius: 4px; }
+.template-preview-lines { display: grid; gap: 5px; }
+.template-preview-lines i { display: block; height: 5px; border-radius: 3px; background: #e4e4ee; }
+.template-preview-lines i:nth-child(2) { width: 82%; }
+.template-preview-lines i:nth-child(3) { width: 64%; }
+.template-preview-chip { position: absolute; top: 10px; right: 10px; padding: 3px 7px; border-radius: 6px;
+  background: #2f2557; color: #fff; font-size: 8px; font-weight: 800; letter-spacing: .8px; }
+.template-card-body { display: grid; align-content: start; gap: 8px; padding: 13px 15px 15px; }
+.template-card-body h3 { margin: 0; font-size: 13.5px; }
+.template-card-body p { margin: 0; color: #7c7d90; font-size: 11px; line-height: 1.45; }
+.template-facts { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 7px 12px; margin: 2px 0 0; padding: 10px 0; border-top: 1px solid #efeff4; }
+.template-facts li { display: grid; gap: 2px; min-width: 0; }
+.template-facts span { color: #9494a5; font-size: 8px; font-weight: 800; letter-spacing: 1px; }
+.template-facts strong { color: #55566e; font-size: 11px; font-weight: 650; overflow-wrap: anywhere; }
+.template-facts strong.is-good { color: #19715c; }
+.template-card-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 2px; }
+.template-card-actions form { display: contents; }
+@media (max-width: 560px) { .template-card-grid { grid-template-columns: 1fr; } .template-facts { grid-template-columns: 1fr; } }
+.design-preview .template-preview { min-height: 190px; border: 1px solid #efeff4; border-radius: 14px; margin-top: 4px; }
+.design-preview .template-preview h3 { margin: 2px 0 0; font-size: 15px; }
+.preview-invoice-number { color: #9494a5; font-size: 9px; font-weight: 800; letter-spacing: 1.2px; }
+.field-help.inline { margin: 0; }
+
+/* Plan page: the term you hold, the terms you can buy, and the rules between them. */
+.plan-term-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 16px 0 4px; }
+.plan-term-fact { padding: 11px 13px; border: 1px solid #efeff4; border-radius: 11px; background: #fbfbfe; display: grid; gap: 3px; }
+.plan-term-fact strong { font-size: 13px; }
+.plan-term-fact small { color: #7c7d90; font-size: 10px; line-height: 1.45; }
+.plan-quota-block { margin-top: 16px; padding-top: 14px; border-top: 1px solid #efeff4; display: grid; gap: 9px; }
+.plan-quota-block h3 { margin: 4px 0 0; font-size: 14px; }
+.plan-renew-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.plan-renew-actions form { display: contents; }
+.plan-price-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin: 12px 0 2px; }
+.plan-price-choice { padding: 9px 11px; border: 1px solid #efeff4; border-radius: 11px; background: #fbfbfe; display: grid; gap: 1px; }
+.plan-price-choice strong { font-size: 16px; letter-spacing: -.2px; }
+.plan-price-choice small { color: #85869a; font-size: 9.5px; }
+.plan-cycle-choice { display: grid; gap: 7px; margin-bottom: 10px; }
+.cycle-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 11px;
+  border: 1px solid #e8e7ef; border-radius: 10px; font-size: 11.5px; font-weight: 650; cursor: pointer; }
+.cycle-option:has(input:checked) { border-color: #a99af6; background: #fbfaff; }
+.cycle-option input { width: 15px; height: 15px; accent-color: #7357f4; }
+.cycle-price { margin-left: 8px; color: #6861a0; font-size: 10.5px; font-weight: 700; }
+.plan-buy-form { margin-top: 12px; }
+.plan-offer-reason { margin: 8px 0 0; color: #7c7d90; font-size: 10px; line-height: 1.5; }
+.plan-rules { margin-top: 12px; padding-top: 11px; border-top: 1px dashed #efeff4; }
+.rule-list { list-style: none; display: grid; gap: 5px; margin: 7px 0 0; padding: 0; color: #66677c; font-size: 10.5px; }
+.plan-cta:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 560px) { .plan-price-choices { grid-template-columns: 1fr; } }
+
+/* The account inbox: one row per notice, readable without a table. */
+.inbox-list { list-style: none; margin: 0; padding: 4px 0; display: grid; }
+.inbox-list > li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  padding: 12px 4px; border-bottom: 1px solid #f1f1f6; }
+.inbox-list > li:last-child { border-bottom: 0; }
+.inbox-list > li.is-read { opacity: .62; }
+.inbox-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px;
+  background: #f3f1ff; color: #6551d7; font-size: 15px; }
+.inbox-body { display: grid; gap: 3px; min-width: 0; }
+.inbox-body p { margin: 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.inbox-body small { color: #9494a5; font-size: 9.5px; }
+.inbox-topic { color: #6861a0; font-size: 8.5px; font-weight: 800; letter-spacing: 1.1px; }
+@media (max-width: 560px) { .inbox-list > li { grid-template-columns: 30px minmax(0, 1fr); } .inbox-list > li form { grid-column: 2; } }
+
+/* ======================================================================== dark theme, panel edition
+     The switch that turns the product dark sits in the top bar of every screen, but the customer
+     panel was written with literal colours while the admin shell was written against the theme
+     tokens - so a customer who pressed it got white cards, a dark table bar and a half-lit page.
+     These rules re-point the panel's surfaces at the same tokens, so one switch changes everything.
+     Light mode is untouched: every rule is gated on the attribute the theme script sets, and the
+     paper swatches in the template gallery deliberately stay light, because they show a document. */
+html[data-theme='dark'] body { background: var(--bg); color: var(--ink-2); }
+html[data-theme='dark'] .auth-body { background: #14182a; }
+html[data-theme='dark'] .app-main { background: var(--bg); }
+html[data-theme='dark'] .topbar { border-bottom-color: var(--line); background: var(--surface); }
+html[data-theme='dark'] .topbar-search, html[data-theme='dark'] .search-form { border-color: var(--line); background: var(--surface-2); }
+html[data-theme='dark'] .topbar-search input, html[data-theme='dark'] .search-form input, html[data-theme='dark'] .search-form > span { color: var(--ink-2); }
+html[data-theme='dark'] .panel, html[data-theme='dark'] .metric-card, html[data-theme='dark'] .metric-card.metric-warning, html[data-theme='dark'] .plan-card, html[data-theme='dark'] .template-card, html[data-theme='dark'] .invoice-line, html[data-theme='dark'] .invoice-summary-strip { border-color: var(--line); background: var(--surface); box-shadow: none; }
+/* Every control except the primary one, which is already a saturated violet and needs no help; the
+   quiet variant is transparent in both themes, and the danger variant borrows the warning palette. */
+html[data-theme='dark'] .button:not(.button-primary):not(.button-danger), html[data-theme='dark'] .row-arrow { border-color: var(--line-strong); color: var(--ink-2); background: var(--surface-2); }
+html[data-theme='dark'] .button-quiet { border-color: transparent; background: transparent; }
+html[data-theme='dark'] .button-secondary:hover, html[data-theme='dark'] .button-quiet:hover, html[data-theme='dark'] .row-arrow:hover { border-color: var(--indigo-line); color: var(--indigo); background: var(--indigo-pale); }
+html[data-theme='dark'] .button-danger { border-color: var(--bad-line); color: #eaa7ad; background: rgba(199,74,86,.14); }
+html[data-theme='dark'] .field-help a, html[data-theme='dark'] .page-footer a, html[data-theme='dark'] .empty-inline a, html[data-theme='dark'] .text-link, html[data-theme='dark'] .plan-custom > a { color: var(--indigo); }
+html[data-theme='dark'] .field > label { color: var(--ink-2); }
+html[data-theme='dark'] .field input, html[data-theme='dark'] .field select, html[data-theme='dark'] .field textarea, html[data-theme='dark'] .invoice-line input { border-color: var(--line-strong); color: var(--ink); background: var(--surface-2); }
+html[data-theme='dark'] .field input::placeholder, html[data-theme='dark'] .field textarea::placeholder, html[data-theme='dark'] .invoice-line input::placeholder { color: #6d7392; }
+html[data-theme='dark'] .data-table thead { background: var(--surface-2); }
+html[data-theme='dark'] .data-table th { border-top-color: var(--line); border-bottom-color: var(--line); color: var(--ink-3); }
+html[data-theme='dark'] .data-table td { border-bottom-color: var(--line); color: var(--ink-2); }
+html[data-theme='dark'] .data-table tbody tr:hover:not(:has(.empty-state)):not(:has(.empty-inline)) { background: var(--surface-2); }
+html[data-theme='dark'] .table-primary, html[data-theme='dark'] .metric-value, html[data-theme='dark'] .list-count strong, html[data-theme='dark'] .panel-heading h2, html[data-theme='dark'] .empty-state h2, html[data-theme='dark'] .plan-card h3, html[data-theme='dark'] .table-amount { color: var(--ink); }
+html[data-theme='dark'] .table-secondary, html[data-theme='dark'] .page-lede, html[data-theme='dark'] .toolbar-note, html[data-theme='dark'] .pagination-row, html[data-theme='dark'] .empty-inline, html[data-theme='dark'] .empty-state p, html[data-theme='dark'] .invoice-lines-header, html[data-theme='dark'] .metric-label, html[data-theme='dark'] .metric-foot, html[data-theme='dark'] .count-dot { color: var(--ink-3); }
+html[data-theme='dark'] .notice, html[data-theme='dark'] .notice-warning { border-color: var(--line); color: var(--ink-2); background: var(--surface-2); }
+html[data-theme='dark'] .notice-warning { border-color: var(--warn-line); color: #e2c184; background: rgba(189,120,40,.13); }
+html[data-theme='dark'] .type-pill { color: var(--ink-3); background: var(--surface-3); }
+html[data-theme='dark'] .plan-custom { border-color: var(--line); background: var(--surface-2); }
+html[data-theme='dark'] .notice-error, html[data-theme='dark'] .global-errors { border-color: var(--bad-line); color: #f0b9bd; background: rgba(199,74,86,.12); }
+html[data-theme='dark'] .notice-success { border-color: var(--ok-line); color: #a9dfcb; background: rgba(25,133,107,.14); }
+html[data-theme='dark'] .notification-row { border-top-color: var(--line); }
+html[data-theme='dark'] .form-divider, html[data-theme='dark'] .page-footer, html[data-theme='dark'] .invoice-summary-strip > div + div { border-color: var(--line); }
+html[data-theme='dark'] .form-divider { background: var(--line); }
+html[data-theme='dark'] .activity-list > li > a:hover, html[data-theme='dark'] .inbox-list > li:hover { background: var(--surface-2); }
+html[data-theme='dark'] .filter-panel, html[data-theme='dark'] .filter-panel-inline { border-bottom-color: var(--line); }

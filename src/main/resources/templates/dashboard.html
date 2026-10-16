@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
-<head th:replace="~{fragments/layout :: head('Overview')}"></head>
+<head th:replace="~{fragments/layout :: head('Dashboard')}"></head>
 <body class="app-body">
 <div class="app-layout">
     <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
@@ -8,60 +8,210 @@
     <main class="app-main">
         <header th:replace="~{fragments/layout :: topbar}"></header>
         <div class="page-content">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
             <div th:replace="~{fragments/layout :: flash}"></div>
-            <section class="welcome-row">
-                <div><span class="kicker">ACCOUNTS, PLANS AND BILLING AT A GLANCE</span><h1>Every customer account<span class="heading-spark">✳</span></h1><p class="page-lede">Statistics are computed per account, so one customer can never appear in another customer’s numbers.</p></div>
-                <a class="button button-primary" th:href="@{/customers/new}"><span class="button-plus">＋</span> Add a customer</a>
-            </section>
-            <section class="metrics-grid" aria-label="Billing summary">
-                <article class="metric-card metric-highlight"><div class="metric-top"><span class="metric-icon icon-violet">↗</span><span class="metric-period">ALL TIME</span></div><p class="metric-label">Paid revenue</p><div class="metric-value"><span class="currency-prefix">₹</span><span th:text="${#numbers.formatDecimal(stats.paidRevenue,1,'COMMA',2,'POINT')}">0.00</span></div><span class="metric-foot"><i class="tiny-positive"></i> Across all accounts</span><div class="metric-sparkline spark-violet"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></article>
-                <article class="metric-card"><div class="metric-top"><span class="metric-icon icon-blue">▤</span><span class="metric-arrow">↗</span></div><p class="metric-label">Invoices generated</p><div class="metric-value"><span th:text="${stats.invoiceCount}">0</span></div><span class="metric-foot">Every customer account</span><div class="metric-sparkline spark-blue"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></article>
-                <article class="metric-card"><div class="metric-top"><span class="metric-icon icon-amber">◷</span><span class="metric-arrow">↗</span></div><p class="metric-label">Outstanding</p><div class="metric-value"><span class="currency-prefix">₹</span><span th:text="${#numbers.formatDecimal(stats.outstanding,1,'COMMA',2,'POINT')}">0.00</span></div><span class="metric-foot">Across sent invoices</span><div class="metric-sparkline spark-amber"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></article>
-                <article class="metric-card"><div class="metric-top"><span class="metric-icon icon-green">♙</span><span class="metric-arrow">↗</span></div><p class="metric-label">Customer accounts</p><div class="metric-value"><span th:text="${stats.customerCount}">0</span></div><span class="metric-foot">Each with its own data</span><div class="metric-sparkline spark-green"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></article>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Super admin console</span>
+                    <h1>Platform overview</h1>
+                    <p class="page-lede">Every figure is an aggregate over live rows, never a sample value. Select a card to open the list behind it.</p>
+                </div>
+                <div class="button-group">
+                    <a class="button" th:href="@{/admin/jobs}"><span aria-hidden="true">◷</span> Job monitoring</a>
+                    <a class="button button-primary" th:href="@{/customers/new}"><span class="button-plus" aria-hidden="true">＋</span> New customer</a>
+                </div>
             </section>
 
+            <div class="widget-error" th:if="${overviewError}" role="alert" style="margin-bottom:16px">
+                <span aria-hidden="true">!</span><span th:text="${overviewError}">Unavailable</span>
+                <a class="text-link" th:href="@{/dashboard}">Retry <span>→</span></a>
+            </div>
+
+            <!-- ============================ summary cards ============================ -->
+            <section class="metrics-grid" aria-label="Account and subscription metrics">
+                <th:block th:each="card : ${overview.kpis}">
+                    <div th:replace="~{fragments/components :: kpi(${card.href}, ${card.icon}, ${card.label}, ${card.value},
+                        ${card.previousValue != null ? 'vs previous 30 days' : 'All live accounts'},
+                        ${card.previousValue != null ? card.value - card.previousValue : null},
+                        ${card.key == 'total' ? 'highlight' : 'plain'})}"></div>
+                </th:block>
+                <div th:if="${overview == null}" class="metric-card" th:each="i : ${#numbers.sequence(1, 6)}">
+                    <span class="skeleton" style="width:40%"></span>
+                    <span class="skeleton" style="width:70%;height:22px"></span>
+                </div>
+            </section>
+
+            <!-- ======================= top 10 new customers ======================= -->
             <section class="panel list-panel">
-                <div class="panel-heading"><div><span class="kicker">CUSTOMER-WISE STATISTICS</span><h2>Accounts</h2></div><a class="text-link" th:href="@{/customers}">Open an account <span>→</span></a></div>
-                <div class="list-toolbar"><div class="list-count"><span class="count-dot"></span><strong th:text="${#lists.size(accountStats)}">0</strong> customer accounts</div><span class="toolbar-note">Read-only view across accounts</span></div>
-                <div class="table-wrap"><table class="data-table"><thead><tr><th>CUSTOMER ACCOUNT</th><th>PLAN</th><th>LOGIN</th><th>INVOICES</th><th>ACTIVE PRODUCTS</th><th>CATEGORIES</th><th>BILLED</th><th>LAST INVOICE</th><th></th></tr></thead>
-                    <tbody>
-                    <tr th:each="row : ${accountStats}">
-                        <td><a class="customer-cell" th:href="@{/customers/{id}(id=${row.customerId})}"><span class="person-avatar" th:text="${#strings.substring(row.companyName,0,1).toUpperCase()}">N</span><span class="customer-cell-copy"><strong th:text="${row.companyName}">Northstar Studio</strong><small th:text="${row.email}">hello@company.com</small></span></a></td>
-                        <td><span th:if="${row.hasPlan()}" class="status-pill status-paid" th:text="${row.planName}">Growth</span><span th:unless="${row.hasPlan()}" class="status-pill status-draft">NO PLAN</span><span class="table-secondary" th:if="${row.hasPlan()}" th:text="${row.planCode}">GROWTH</span></td>
-                        <td><span th:text="${row.loginEmail != null ? row.loginEmail : 'Not set'}">login@company.com</span><span class="table-secondary" th:if="${row.loginEmail != null and !row.loginEnabled}">Disabled</span></td>
-                        <td th:text="${row.invoiceCount}">0</td>
-                        <td th:text="${row.productCount}">0</td>
-                        <td th:text="${row.categoryCount}">0</td>
-                        <td class="table-amount"><span th:text="${#numbers.formatDecimal(row.totalBilled,1,'COMMA',2,'POINT')}">0.00</span></td>
-                        <td th:text="${row.lastInvoiceDate != null ? row.lastInvoiceDate : '—'}">2026-05-10</td>
-                        <td><a class="row-arrow" th:href="@{/customers/{id}(id=${row.customerId})}" aria-label="Open account">↗</a></td>
-                    </tr>
-                    <tr th:if="${#lists.isEmpty(accountStats)}"><td colspan="9"><div class="empty-state"><span class="empty-icon">♙</span><h2>No customer accounts yet.</h2><p>Create an account to give a customer its own workspace, plan and templates.</p><a class="button button-primary button-small" th:href="@{/customers/new}">Add a customer account <span>→</span></a></div></td></tr>
-                    </tbody></table></div>
+                <div class="panel-heading">
+                    <div><span class="kicker">Most recent registrations</span><h2>Top 10 new customers</h2></div>
+                    <a class="text-link" th:href="@{/customers(sort='created',dir='desc')}">Show all <span aria-hidden="true">→</span></a>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <caption th:text="${overview != null ? #lists.size(overview.newCustomers) : 0} + ' newest account(s), most recent first'">0 accounts</caption>
+                        <thead>
+                        <tr>
+                            <th scope="col">Customer ID</th><th scope="col">Company name</th><th scope="col">Contact email</th>
+                            <th scope="col">Registration date</th><th scope="col">Account status</th><th scope="col">Subscription plan</th>
+                            <th scope="col">Subscription expiry</th><th scope="col"><span class="visually-hidden">Actions</span></th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="row : ${overview.newCustomers}">
+                            <td><span class="table-id" th:text="'#' + ${row.customerId}">#0</span></td>
+                            <td><a class="customer-cell" th:href="@{/customers/{id}(id=${row.customerId})}">
+                                <span class="person-avatar" aria-hidden="true" th:text="${#strings.substring(row.companyName, 0, 1).toUpperCase()}">N</span>
+                                <span class="customer-cell-copy"><strong th:text="${row.companyName}">Company</strong><small th:text="${row.contactName}">Contact</small></span>
+                            </a></td>
+                            <td><span class="table-primary" th:text="${row.email}">a@b.test</span></td>
+                            <td class="nowrap" th:text="${row.registeredOn != null ? #strings.replace(row.registeredOn, 'T', ' ') : '—'}">—</td>
+                            <td><span class="badge" th:classappend="${row.accountStatus == 'Active'} ? 'status-active' : 'status-disabled'" th:text="${row.accountStatus}">Active</span></td>
+                            <td>
+                                <span th:if="${row.planName != null}" class="badge badge-info" th:text="${row.planName}">Growth</span>
+                                <span th:unless="${row.planName != null}" class="badge status-draft">No plan</span>
+                            </td>
+                            <td class="nowrap" th:text="${row.expiry != null} ? ${row.expiry} : '—'">—</td>
+                            <td><a class="row-arrow" th:href="@{/customers/{id}(id=${row.customerId})}" th:attr="aria-label='Open ' + ${row.companyName}">→</a></td>
+                        </tr>
+                        <tr th:if="${overview == null or #lists.isEmpty(overview.newCustomers)}">
+                            <td colspan="8">
+                                <div th:replace="~{fragments/components :: empty('◧', 'No customer accounts yet',
+                                    'Add an account to give a company its own workspace, plan and templates.',
+                                    'Add a customer account', '/customers/new')}"></div>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
             </section>
 
-            <section class="dashboard-grid">
-                <article class="panel invoice-panel">
-                    <div class="panel-heading"><div><span class="kicker">THE LATEST</span><h2>Recent invoices</h2></div><a class="text-link" th:href="@{/invoices}">All invoices <span>→</span></a></div>
-                    <div class="table-wrap"><table class="data-table"><thead><tr><th>INVOICE</th><th>CUSTOMER</th><th>ISSUED</th><th>AMOUNT</th><th>STATUS</th><th></th></tr></thead>
-                        <tbody><tr th:each="invoice : ${recentInvoices}"><td><a class="table-primary" th:href="@{/invoices/{id}(id=${invoice.id})}" th:text="${invoice.invoiceNumber}">INV-001001</a></td><td><span class="table-primary" th:text="${invoice.customer.companyName}">Northstar Studio</span><span class="table-secondary" th:text="${invoice.templateName}">Classic</span></td><td th:text="${invoice.issueDate}">2026-01-01</td><td class="table-amount"><span th:text="${invoice.currency}">INR</span> <span th:text="${#numbers.formatDecimal(invoice.totalAmount,1,'COMMA',2,'POINT')}">0.00</span></td><td><span class="status-pill" th:classappend="| status-${#strings.toLowerCase(invoice.status.name())}|" th:text="${invoice.status}">SENT</span></td><td><a class="row-arrow" th:href="@{/invoices/{id}(id=${invoice.id})}" aria-label="Open invoice">↗</a></td></tr>
-                        <tr th:if="${#lists.isEmpty(recentInvoices)}"><td colspan="6"><div class="empty-inline"><span class="empty-icon">▤</span><strong>No invoices generated yet.</strong><span>Customers create invoices from their own portal.</span></div></td></tr></tbody>
-                    </table></div>
-                </article>
-                <aside class="dashboard-side">
-                    <article class="welcome-card"><div class="welcome-card-top"><span class="welcome-art">✦</span><span class="tag tag-light">HOW IT WORKS</span></div><h3>Templates follow<br>the plan.</h3><p>Bundle templates into a plan, and each customer unlocks exactly those when it subscribes.</p><a th:href="@{/admin/templates}">Manage templates <span>→</span></a><div class="welcome-orbit orbit-one"></div><div class="welcome-orbit orbit-two"></div></article>
-                    <article class="panel people-panel"><div class="panel-heading"><div><span class="kicker">CONTROL PLANE</span><h2>Catalogue setup</h2></div></div>
-                        <div class="people-list">
-                            <a class="person-row" th:href="@{/admin/templates}"><span class="person-avatar">▧</span><span class="person-details"><strong>Bill templates</strong><small>Create, hide and delete designs</small></span><span class="person-arrow">→</span></a>
-                            <a class="person-row" th:href="@{/admin/plans}"><span class="person-avatar">✳</span><span class="person-details"><strong>Plans</strong><small>Bundle templates into plans</small></span><span class="person-arrow">→</span></a>
-                            <a class="person-row" th:href="@{/customers}"><span class="person-avatar">♙</span><span class="person-details"><strong>Customer accounts</strong><small>Logins, plans and usage</small></span><span class="person-arrow">→</span></a>
+            <!-- ============================ second band ============================ -->
+            <section class="dashboard-grid" style="margin-top:16px">
+                <div class="dashboard-side">
+                    <article class="panel">
+                        <div class="panel-heading">
+                            <div><span class="kicker">Lifecycle</span><h2>Recently created subscriptions</h2></div>
+                            <a class="text-link" th:href="@{/admin/plans}">Plans <span aria-hidden="true">→</span></a>
+                        </div>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead><tr><th scope="col">Account</th><th scope="col">Plan</th><th scope="col">Term</th><th scope="col">Status</th></tr></thead>
+                                <tbody>
+                                <tr th:each="sub : ${overview.recentSubscriptions}">
+                                    <td><span class="table-primary" th:text="${sub.customer.companyName}">Company</span><span class="table-secondary" th:text="'assigned by ' + ${sub.assignedBy != null ? sub.assignedBy : 'system'}">assigned</span></td>
+                                    <td th:text="${sub.plan.name}">Growth</td>
+                                    <td class="nowrap"><span th:text="${sub.startedOn}">2026-01-01</span> → <span th:text="${sub.endsOn != null ? sub.endsOn : 'open'}">open</span></td>
+                                    <td><span th:replace="~{fragments/components :: badge(${sub.status})}">ACTIVE</span></td>
+                                </tr>
+                                <tr th:if="${overview == null or #lists.isEmpty(overview.recentSubscriptions)}"><td colspan="4">
+                                    <div th:replace="~{fragments/components :: empty('◆', 'No subscriptions assigned yet', 'Assign a plan from a customer account, or let a customer choose one at signup.', null, null)}"></div>
+                                </td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </article>
-                </aside>
+
+                    <article class="panel">
+                        <div class="panel-heading">
+                            <div><span class="kicker">Renewals</span><h2>Upcoming subscription expirations</h2></div>
+                            <a class="text-link" th:href="@{/customers(expiringSoon=true)}">Filter accounts <span aria-hidden="true">→</span></a>
+                        </div>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead><tr><th scope="col">Account</th><th scope="col">Plan</th><th scope="col">Expires</th><th scope="col">Left</th></tr></thead>
+                                <tbody>
+                                <tr th:each="row : ${overview.upcomingExpiries}">
+                                    <td><a class="link-cell" th:href="@{/customers/{id}(id=${row.customer.id})}" th:text="${row.customer.companyName}">Company</a></td>
+                                    <td th:text="${row.subscription.plan.name}">Growth</td>
+                                    <td class="nowrap" th:text="${row.subscription.endsOn}">2026-11-01</td>
+                                    <td><span class="badge" th:classappend="${row.daysRemaining <= 3} ? 'status-cancelled' : (${row.daysRemaining <= 7} ? 'status-pending' : 'status-draft')"
+                                              th:text="${row.daysRemaining} + ' d'">7 d</span></td>
+                                </tr>
+                                <tr th:if="${overview == null or #lists.isEmpty(overview.upcomingExpiries)}"><td colspan="4">
+                                    <div th:replace="~{fragments/components :: empty('✓', 'Nothing expires in the next 30 days', 'Expiry reminders are sent by the scheduled reminder job.', null, null)}"></div>
+                                </td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="dashboard-side">
+                    <article class="panel">
+                        <div class="panel-heading">
+                            <div><span class="kicker">Last 30 days</span><h2>Recent administrative activity</h2></div>
+                            <a class="text-link" th:href="@{/admin/audit}">Audit history <span aria-hidden="true">→</span></a>
+                        </div>
+                        <div class="panel-body">
+                            <ol class="timeline">
+                                <li th:each="row : ${overview.recentActivity}" th:with="event=${row.record}">
+                                    <span class="node" th:classappend="${event.outcome == 'FAILURE'} ? ' is-bad' : ' is-ok'"></span>
+                                    <div>
+                                        <div class="timeline-head">
+                                            <strong th:text="${event.summary}">Summary</strong>
+                                            <time th:attr="datetime=${event.createdAt}" th:text="${row.when}">when</time>
+                                        </div>
+                                        <p><span th:text="${event.actor}">actor</span> · <span class="table-id" th:text="${event.action} + ' / ' + ${event.resourceType}">ACTION</span></p>
+                                    </div>
+                                </li>
+                                <li th:if="${overview == null or #lists.isEmpty(overview.recentActivity)}"><span class="node is-muted"></span><div><p>No recorded activity yet.</p></div></li>
+                            </ol>
+                        </div>
+                    </article>
+
+                    <article class="panel">
+                        <div class="panel-heading">
+                            <div><span class="kicker">Queue</span><h2>Failed and pending jobs</h2></div>
+                            <a class="text-link" th:href="@{/admin/jobs}">All jobs <span aria-hidden="true">→</span></a>
+                        </div>
+                        <div class="panel-body" style="display:grid;gap:12px">
+                            <div class="stat-row">
+                                <span class="stat" th:classappend="${jobCounts.failed > 0} ? ' is-bad'"><b th:text="${jobCounts.failed}">0</b><span>Failed</span></span>
+                                <span class="stat"><b th:text="${jobCounts.running}">0</b><span>Running</span></span>
+                                <span class="stat is-warn"><b th:text="${jobCounts.scheduled}">0</b><span>Scheduled</span></span>
+                                <span class="stat is-ok"><b th:text="${jobCounts.completed}">0</b><span>Completed</span></span>
+                            </div>
+                            <div th:each="job : ${overview.attentionJobs}">
+                                <div class="timeline-head">
+                                    <a class="link-cell" th:href="@{/admin/jobs/{id}(id=${job.id})}" th:text="${job.name}">Job</a>
+                                    <span th:replace="~{fragments/components :: badge(${job.status})}">RUNNING</span>
+                                </div>
+                                <div th:replace="~{fragments/components :: progress(${job.processedCount}, ${job.eligibleCount}, null)}"></div>
+                            </div>
+                            <p th:if="${overview == null or #lists.isEmpty(overview.attentionJobs)}" class="field-help" style="margin:0">No jobs are running or waiting. Scheduled jobs appear here when they need attention.</p>
+                        </div>
+                    </article>
+
+                    <article class="panel">
+                        <div class="panel-heading"><div><span class="kicker">Configuration</span><h2>Template and notification changes</h2></div>
+                            <a class="text-link" th:href="@{/admin/templates}">Templates <span aria-hidden="true">→</span></a></div>
+                        <div class="panel-body">
+                            <ol class="timeline">
+                                <li th:each="row : ${overview.configurationChanges}">
+                                    <span class="node"></span>
+                                    <div>
+                                        <div class="timeline-head"><strong th:text="${row.record.summary}">Change</strong>
+                                            <time th:text="${row.record.actor}">actor</time></div>
+                                        <p th:text="'Resource ' + ${row.record.resourceType} + ' · ' + ${row.when}">detail</p>
+                                    </div>
+                                </li>
+                                <li th:if="${overview == null or #lists.isEmpty(overview.configurationChanges)}"><span class="node is-muted"></span><div><p>No configuration changes in the last 30 days.</p></div></li>
+                            </ol>
+                        </div>
+                    </article>
+                </div>
             </section>
-            <footer class="page-footer"><span>Administrators read customer records; customers own them.</span><a th:href="@{/plans}" target="_blank" rel="noopener">Preview plans ↗</a></footer>
+
+            <footer class="page-footer">
+                <span>Invoices <b th:text="${stats.invoiceCount}">0</b> · outstanding <b th:text="${#numbers.formatDecimal(stats.outstanding, 1, 'COMMA', 2, 'POINT')}">0</b> · overdue <b th:text="${stats.overdueCount}">0</b> · active audit types <b th:text="${auditTypeCount}">0</b></span>
+                <span>Email transport: <b th:text="${mailTransport}">recording</b></span>
+            </footer>
         </div>
     </main>
 </div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
 </body>
 </html>

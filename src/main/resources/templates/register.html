@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Create customer account')}"></head>
+<!-- The sign-up page shares the auth shell with the sign-in page: the same card, the same field
+     rhythm and the same message slots, so the two halves of getting in look like one product.
+     Nothing here is invented - every class is the one login.html already uses. -->
+<body class="auth-body">
+    <div class="auth-ambient ambient-one"></div><div class="auth-ambient ambient-two"></div>
+    <main class="auth-shell">
+        <section class="auth-story">
+            <a class="brand brand-on-dark" th:href="@{/plans}"><span class="brand-mark">b<span>.</span></span><span class="brand-copy"><strong>billgen</strong><small>INVOICE STUDIO</small></span></a>
+            <div class="auth-story-copy">
+                <span class="kicker kicker-light"><i></i> ONE WORKSPACE PER COMPANY</span>
+                <h1>Your invoices,<br><em>on your own terms.</em></h1>
+                <p>Create the account for your company. Choose a plan on the next screen; activation is immediate and no payment details are collected here.</p>
+            </div>
+            <div class="auth-story-foot"><span>Templates, products, categories, audit history</span><span>© 2026 BillGen</span></div>
+        </section>
+        <section class="auth-panel">
+            <div class="auth-card">
+                <div class="auth-mobile-brand"><span class="brand-mark">b<span>.</span></span><strong>billgen</strong></div>
+                <span class="kicker">CREATE CUSTOMER ACCOUNT</span>
+                <h2>Set up your<br>workspace</h2>
+                <p class="auth-subtitle">These are the details your invoices will carry, so it is worth getting them right now.</p>
+                <form class="stack-form" th:action="@{/register}" th:object="${registrationForm}" method="post" novalidate>
+                <div class="global-errors" th:if="${#fields.hasGlobalErrors()}"><p th:each="err : ${#fields.globalErrors()}" th:text="${err}">Please check the form.</p></div>
+                    <div class="field"><label for="companyName">Company name <span class="required">*</span></label><input id="companyName" th:field="*{companyName}" autocomplete="organization" maxlength="160" required><small class="field-error" th:if="${#fields.hasErrors('companyName')}" th:errors="*{companyName}"></small></div>
+                    <div class="field"><label for="contactName">Contact name <span class="required">*</span></label><input id="contactName" th:field="*{contactName}" autocomplete="name" maxlength="120" required><small class="field-error" th:if="${#fields.hasErrors('contactName')}" th:errors="*{contactName}"></small></div>
+                    <div class="field"><label for="email">Email <span class="required">*</span></label><input id="email" type="email" th:field="*{email}" autocomplete="email" maxlength="190" placeholder="you@company.com" required><small class="field-help">Your sign-in address. It also appears on invoices as the billing contact.</small><small class="field-error" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></small></div>
+                    <div class="field"><label for="phone">Phone</label><input id="phone" type="tel" th:field="*{phone}" autocomplete="tel" maxlength="40" placeholder="Optional"><small class="field-error" th:if="${#fields.hasErrors('phone')}" th:errors="*{phone}"></small></div>
+                    <div class="field"><label for="country">Country <span class="required">*</span></label><input id="country" th:field="*{country}" autocomplete="country-name" maxlength="80" required><small class="field-help">Used to work out whether an invoice is domestic or interstate.</small><small class="field-error" th:if="${#fields.hasErrors('country')}" th:errors="*{country}"></small></div>
+                    <div class="field"><label for="password">Password <span class="required">*</span></label><input id="password" type="password" th:field="*{password}" autocomplete="new-password" minlength="8" maxlength="100" required><small class="field-help">At least 8 characters. It is stored as a hash, never as text.</small><small class="field-error" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></small></div>
+                    <button class="button button-primary button-wide button-tall" type="submit">Create account <span>→</span></button>
+                </form>
+                <p class="auth-note">Already have an account? <a th:href="@{/login}">Sign in</a>.</p>
+                <a class="auth-public-link" th:href="@{/plans}">Compare the plans first <span>↗</span></a>
+            </div>
+            <footer class="auth-footer">No card required <span>·</span> Your data stays yours</footer>
+        </section>
+    </main>
+</body>
+</html>

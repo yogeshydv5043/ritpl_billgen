@@ -1,14 +1,111 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Manage plans')}"></head>
-<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
-<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content">
-    <div th:replace="~{fragments/layout :: flash}"></div>
-    <section class="page-title-row"><div><span class="kicker">PLAN SETTINGS</span><h1>Subscription plans</h1><p class="page-lede">Bundle one or more templates into every plan and manage which plans customers can choose.</p></div><a class="button button-primary" th:href="@{/admin/plans/new}"><span class="button-plus">＋</span> Add a plan</a></section>
-    <section class="plan-admin-grid"><article class="plan-admin-card" th:each="plan : ${plans}"><div class="plan-admin-top"><span class="plan-symbol" th:classappend="${plan.featured ? ' symbol-featured' : ''}" th:text="${#strings.substring(plan.name,0,1)}">S</span><span class="status-pill" th:classappend="${plan.active ? ' status-paid' : ' status-draft'}" th:text="${plan.active ? 'LIVE' : 'HIDDEN'}">LIVE</span></div><span class="plan-code" th:text="${plan.code}">STARTER</span><h2 th:text="${plan.name}">Starter</h2><p th:text="${plan.tagline}">For your first invoices</p><div class="admin-plan-prices"><div><small>MONTHLY</small><strong><span th:text="${plan.currency == 'INR' ? '₹' : plan.currency + ' '}">₹</span><span th:text="${#numbers.formatDecimal(plan.monthlyPrice,1,'COMMA',2,'POINT')}">0.00</span></strong></div><div><small>ANNUAL</small><strong><span th:text="${plan.currency == 'INR' ? '₹' : plan.currency + ' '}">₹</span><span th:text="${#numbers.formatDecimal(plan.annualPrice,1,'COMMA',2,'POINT')}">0.00</span></strong></div></div>
-        <div class="admin-plan-limits"><span><strong th:text="${plan.maxCustomers}">25</strong> account limit</span><span><strong th:text="${plan.maxMonthlyInvoices}">50</strong> invoices / month</span></div>
-        <div class="plan-feature-tags"><span class="kicker">TEMPLATES</span><span class="tag" th:each="template : ${plan.templates}" th:text="${template.name}">Classic</span><span class="toolbar-note" th:if="${#lists.isEmpty(plan.templates)}">No templates</span></div>
-        <div class="admin-plan-limits"><span><strong th:text="${subscriberCounts[plan.id]}">0</strong> subscribed accounts</span></div>
-        <div class="admin-plan-actions"><a class="button button-secondary button-small" th:href="@{/admin/plans/{id}/edit(id=${plan.id})}">Edit plan</a><form th:action="@{/admin/plans/{id}/toggle(id=${plan.id})}" method="post"><button class="button button-quiet button-small" type="submit" th:text="${plan.active ? 'Hide' : 'Publish'}">Hide</button></form></div></article><div class="plan-admin-empty" th:if="${#lists.isEmpty(plans)}"><span class="empty-icon">✳</span><h2>No plans just yet.</h2><a th:href="@{/admin/plans/new}">Create your first plan →</a></div></section>
-    <footer class="page-footer"><span>Customers can only generate invoices with the templates in their active plan.</span><a th:href="@{/admin/templates}">Manage templates ↗</a></footer>
-</div></main></div></body></html>
+<head th:replace="~{fragments/layout :: head('Subscription plans')}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Subscription management</span>
+                    <h1>Plans &amp; entitlements</h1>
+                    <p class="page-lede">A plan grants invoice templates, product quotas, audit quotas and retention. Deactivating a plan only closes it to new subscribers — existing subscriptions run to the end of their term.</p>
+                </div>
+                <div class="button-group">
+                    <a class="button button-quiet" th:href="@{/plans}" target="_blank" rel="noopener">Public pricing page</a>
+                    <a class="button button-primary" th:href="@{/admin/plans/new}"><span class="button-plus" aria-hidden="true">＋</span> New plan</a>
+                </div>
+            </section>
+
+            <div class="stat-row">
+                <div class="stat"><b th:text="${#lists.size(plans)}">0</b><span>Plans</span></div>
+                <div class="stat is-ok"><b th:text="${activeCount}">0</b><span>Active</span></div>
+                <div class="stat"><b th:text="${#lists.size(plans) - activeCount}">0</b><span>Inactive</span></div>
+            </div>
+
+            <section class="panel list-panel">
+                <div class="list-toolbar">
+                    <div class="list-count"><span class="count-dot" aria-hidden="true"></span>
+                        <strong th:text="${#lists.size(plans)}">0</strong> plan(s) — soft-deleted plans are hidden</div>
+                    <p class="toolbar-note">Limits shown are the per-term defaults; a subscription may override them.</p>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th scope="col">ID</th><th scope="col">Plan</th><th scope="col">Description</th>
+                            <th scope="col">Price</th><th scope="col">Customers</th><th scope="col">Invoice limit</th>
+                            <th scope="col">Audit limit</th><th scope="col">Templates</th><th scope="col">Lifecycle status</th>
+                            <th scope="col">Updated</th><th scope="col">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="plan : ${plans}"
+                            th:with="end=${plan.planEndOn}, start=${plan.planStartOn},
+                                     lifecycle=${!plan.active ? 'Inactive' : (end != null and end.isBefore(today) ? 'Expired' : (end != null and !end.isAfter(today.plusDays(30)) ? 'Expiring Soon' : (start != null and start.isAfter(today) ? 'Pending' : 'Active')))}">
+                            <td><span class="table-id" th:text="'#' + ${plan.id}">#0</span></td>
+                            <td><a class="table-primary" th:href="@{/admin/plans/{id}(id=${plan.id})}" th:text="${plan.name}">Growth</a>
+                                <span class="table-secondary" th:text="${plan.code}">GROWTH</span></td>
+                            <td class="wrap-cell"><span th:text="${plan.description != null ? plan.description : plan.tagline}">Desc</span>
+                                <span class="table-secondary" th:if="${plan.featured}">featured on the pricing page</span></td>
+                            <td class="table-amount"><span th:text="${plan.currency}">INR</span> <span th:text="${#numbers.formatDecimal(plan.monthlyPrice, 1, 'COMMA', 2, 'POINT')}">0</span>
+                                <span class="table-secondary">/ mo · <span th:text="${#numbers.formatDecimal(plan.annualPrice, 1, 'COMMA', 2, 'POINT')}">0</span> / yr</span></td>
+                            <td><strong th:text="${subscriberCounts.get(plan.id)}">0</strong><span class="table-secondary">assigned</span></td>
+                            <td th:text="${plan.maxMonthlyInvoices} + ' / ' + ${plan.billingCycle.label.toLowerCase()}">50</td>
+                            <td><span th:text="${plan.auditDailyLimit != null ? plan.auditDailyLimit + ' / day' : 'No daily cap'}">—</span>
+                                <span class="table-secondary" th:text="${plan.auditMonthlyLimit != null ? plan.auditMonthlyLimit + ' / month' : 'no monthly cap'}">—</span></td>
+                            <td><span class="badge badge-info" th:text="${#lists.size(plan.templates)} + ' permitted'">0 permitted</span>
+                                <span class="table-secondary" th:text="${#lists.size(plan.auditTypes)} + ' audit types'">0 audit types</span></td>
+                            <td>
+                                <span class="badge" th:with="tone=${lifecycle == 'Active' ? 'status-active' : (lifecycle == 'Expired' ? 'status-expired' : (lifecycle == 'Pending' ? 'status-pending' : 'status-inactive'))}"
+                                      th:classappend="${tone}" th:text="${lifecycle}">Active</span>
+                                <span class="table-secondary" th:if="${end != null}" th:text="'ends ' + ${end}">ends</span>
+                            </td>
+                            <td class="nowrap"><span class="table-primary" th:text="${plan.updatedAt != null ? plan.updatedAt : plan.createdAt}">—</span>
+                                <span class="table-secondary" th:if="${plan.updatedBy != null}" th:text="'by ' + ${plan.updatedBy}">by</span></td>
+                            <td>
+                                <div class="row-actions">
+                                    <a class="row-arrow" th:href="@{/admin/plans/{id}(id=${plan.id})}" title="View plan" th:attr="aria-label='View plan ' + ${plan.name}">→</a>
+                                    <a class="button button-quiet button-small" th:href="@{/admin/plans/{id}/edit(id=${plan.id})}">Edit</a>
+                                    <form method="post" th:action="@{/admin/plans/{id}/toggle(id=${plan.id})}"
+                                          th:attr="data-confirm-title=${plan.active ? 'Deactivate this plan?' : 'Reactivate this plan?'},
+                                                   data-confirm-text=${plan.active
+                                                       ? 'New subscribers can no longer pick ' + plan.name + '. The ' + (grandfatheredCounts.get(plan.id) ?: 0) + ' subscription(s) already on it keep every entitlement until their term ends — nothing is cancelled by this action.'
+                                                       : 'It becomes selectable by customers and assignable by administrators again.' + (plan.planEndOn != null and plan.planEndOn.isBefore(today) ? ' Note: its sale window has already closed, so activation will be refused.' : '')},
+                                                   data-confirm-check=${plan.active ? 'I understand existing subscriptions are grandfathered, not terminated.' : ''}">
+                                        <button class="button button-quiet button-small" type="submit" th:text="${plan.active ? 'Deactivate' : 'Activate'}">Deactivate</button>
+                                    </form>
+                                    <form method="post" th:action="@{/admin/plans/{id}/delete(id=${plan.id})}"
+                                          th:attr="data-confirm-title='Retire this plan?',
+                                                   data-confirm-text=${'The plan is soft-deleted: it leaves the pricing page and the plan picker, while historical subscriptions keep pointing at it. Retiring is refused while any active subscription still uses it.'},
+                                                   data-confirm-check='I understand this only affects new assignments.'">
+                                        <button class="button button-danger button-small" type="submit">Retire</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(plans)}"><td colspan="11">
+                            <div th:replace="~{fragments/components :: empty('◇', 'No plans defined', 'Create a plan to grant customers invoice templates, product quotas and audit quotas. Activation is immediate for both admins and customers — no checkout.', 'New plan', '/admin/plans/new')}"></div>
+                        </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <footer class="page-footer">
+                <span>Plan changes are audited and evict the cached pricing page and dashboard counters.</span>
+                <span th:text="${activeCount} + ' active of ' + ${#lists.size(plans)}">0 of 0</span>
+            </footer>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

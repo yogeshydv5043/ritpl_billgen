@@ -3,7 +3,6 @@ package com.ritpl.billgen.entity;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -18,11 +17,8 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
-/**
- * The plan a customer account purchased. The subscription is the link that unlocks the bill
- * templates bundled with {@link SubscriptionPlan#getTemplates()} for that account.
- */
 @Entity
 @Table(name = "customer_subscriptions", indexes = {
         @Index(name = "idx_customer_subscriptions_customer", columnList = "customer_id, created_at DESC"),
@@ -30,48 +26,72 @@ import jakarta.persistence.Table;
 })
 public class CustomerSubscription implements Serializable {
     private static final long serialVersionUID = 1L;
-
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "customer_id", nullable = false)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
-    @JoinColumn(name = "plan_id", nullable = false)
+    @ManyToOne(fetch = FetchType.EAGER, optional = false) @JoinColumn(name = "plan_id", nullable = false)
     private SubscriptionPlan plan;
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 16)
     private SubscriptionStatus status = SubscriptionStatus.ACTIVE;
-    @Column(name = "started_on", nullable = false)
-    private LocalDate startedOn = LocalDate.now();
-    @Column(name = "ends_on")
-    private LocalDate endsOn;
-    @Column(name = "assigned_by", length = 190)
-    private String assignedBy;
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-    @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
+    @Column(name = "started_on", nullable = false) private LocalDate startedOn = LocalDate.now();
+    @Column(name = "ends_on") private LocalDate endsOn;
+    @Column(name = "assigned_by", length = 190) private String assignedBy;
+    @Column(name = "invoice_limit_override") private Integer invoiceLimitOverride;
+    @Column(name = "product_limit_override") private Integer productLimitOverride;
+    @Column(name = "custom_template_limit_override") private Integer customTemplateLimitOverride;
+    @Column(name = "invoice_usage_carry_forward", nullable = false) private int invoiceUsageCarryForward;
+    @Version @Column(nullable = false) private long version;
+    @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
+    @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
 
     protected CustomerSubscription() { }
-
     public CustomerSubscription(Customer customer, SubscriptionPlan plan, SubscriptionStatus status, String assignedBy) {
-        this.customer = customer;
-        this.plan = plan;
-        this.status = status == null ? SubscriptionStatus.ACTIVE : status;
-        this.assignedBy = assignedBy;
-        this.startedOn = LocalDate.now();
+        this(customer, plan, status, assignedBy, LocalDate.now(), null, 0);
     }
-
+    public CustomerSubscription(Customer customer, SubscriptionPlan plan, SubscriptionStatus status, String assignedBy,
+            LocalDate startedOn, LocalDate endsOn, int invoiceUsageCarryForward) {
+        this.customer = customer; this.plan = plan; this.status = status == null ? SubscriptionStatus.ACTIVE : status;
+        this.assignedBy = assignedBy; this.startedOn = startedOn == null ? LocalDate.now() : startedOn;
+        this.endsOn = endsOn; this.invoiceUsageCarryForward = Math.max(0, invoiceUsageCarryForward);
+    }
     @PrePersist void onCreate() { LocalDateTime now = LocalDateTime.now(); createdAt = now; updatedAt = now; }
     @PreUpdate void onUpdate() { updatedAt = LocalDateTime.now(); }
-
     public boolean isActive() { return status == SubscriptionStatus.ACTIVE; }
-    /** An active subscription whose end date has passed no longer grants template access. */
-    public boolean isEffective(LocalDate today) {
-        return isActive() && (endsOn == null || !endsOn.isBefore(today));
+    public boolean isEffective(LocalDate today) { return isActive() && !startedOn.isAfter(today) && (endsOn == null || !endsOn.isBefore(today)); }
+    /**
+     * The invoice allowance for this term. A plan states its figure per billing period, so a term bought
+     * for more than one period carries that figure once per period it contains - twelve monthly periods
+     * for a year of a monthly plan - and an override set by an administrator always wins.
+     */
+    public int getEffectiveInvoiceLimit() {
+        if (invoiceLimitOverride != null) return invoiceLimitOverride;
+        long perPeriod = plan == null ? 0 : plan.getMaxMonthlyInvoices();
+        if (perPeriod <= 0) return (int) Math.max(0, perPeriod);
+        return (int) Math.min(Integer.MAX_VALUE, perPeriod * purchasedCycles());
     }
 
+    /** The figure the plan advertises, before the term length multiplies it. */
+    public int getInvoiceLimitPerPeriod() { return plan == null ? 0 : plan.getMaxMonthlyInvoices(); }
+
+    /** How many of the plan's own billing periods this term covers; a term of unknown length counts as one. */
+    public int purchasedCycles() {
+        if (plan == null || startedOn == null || endsOn == null) return 1;
+        java.time.Period window = plan.usageWindow();
+        if (window == null || window.isZero() || window.isNegative()) return 1;
+        java.time.LocalDate limit = endsOn.plusDays(1);
+        java.time.LocalDate cursor = startedOn;
+        int cycles = 0;
+        while (cursor.isBefore(limit)) {
+            java.time.LocalDate next = cursor.plus(window);
+            if (!next.isAfter(cursor)) break;            // a window that never advances cannot spin forever
+            cycles++;
+            cursor = next;
+            if (cycles >= 240) break;                     // no plan is sold for two centuries
+        }
+        return Math.max(1, cycles);
+    }
+    public int getEffectiveProductLimit() { return productLimitOverride == null ? plan.getMaxProducts() : productLimitOverride; }
+    public int getEffectiveCustomTemplateLimit() { return customTemplateLimitOverride == null ? plan.getMaxCustomTemplates() : customTemplateLimitOverride; }
     public Long getId() { return id; }
     public Customer getCustomer() { return customer; }
     public void setCustomer(Customer value) { customer = value; }
@@ -86,6 +106,15 @@ public class CustomerSubscription implements Serializable {
     public void setEndsOn(LocalDate value) { endsOn = value; }
     public String getAssignedBy() { return assignedBy; }
     public void setAssignedBy(String value) { assignedBy = value; }
+    public Integer getInvoiceLimitOverride() { return invoiceLimitOverride; }
+    public void setInvoiceLimitOverride(Integer value) { invoiceLimitOverride = value; }
+    public Integer getProductLimitOverride() { return productLimitOverride; }
+    public void setProductLimitOverride(Integer value) { productLimitOverride = value; }
+    public Integer getCustomTemplateLimitOverride() { return customTemplateLimitOverride; }
+    public void setCustomTemplateLimitOverride(Integer value) { customTemplateLimitOverride = value; }
+    public int getInvoiceUsageCarryForward() { return invoiceUsageCarryForward; }
+    public void setInvoiceUsageCarryForward(int value) { invoiceUsageCarryForward = Math.max(0, value); }
+    public long getVersion() { return version; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 }

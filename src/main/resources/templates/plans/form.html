@@ -1,27 +1,259 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{fragments/layout :: head(${formTitle})}"></head>
-<body class="app-body"><div class="app-layout"><div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div><aside th:replace="~{fragments/layout :: sidebar}"></aside>
-<main class="app-main"><header th:replace="~{fragments/layout :: topbar}"></header><div class="page-content page-content-narrow">
-    <div class="breadcrumb"><a th:href="@{/admin/plans}">Subscription plans</a><span>/</span><span th:text="${formTitle}">Add plan</span></div>
-    <section class="page-title-row compact-title"><div><span class="kicker">PLAN SETTINGS</span><h1 th:text="${formTitle}">Add subscription plan</h1><p class="page-lede">Set prices, describe the offer and choose exactly which templates the plan unlocks.</p></div></section>
-    <form class="panel form-panel" th:action="@{${formAction}}" th:object="${planForm}" method="post" novalidate>
-        <div class="form-intro"><span class="form-step">01</span><div><h2>Plan identity</h2><p>The first things people will notice.</p></div></div>
-        <div class="form-grid"><div class="field"><label for="name">Plan name <span class="required">*</span></label><input id="name" th:field="*{name}" placeholder="e.g. Growth"><small class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></small></div><div class="field"><label for="code">Plan code <span class="required">*</span></label><input id="code" th:field="*{code}" placeholder="e.g. GROWTH" autocapitalize="characters"><small class="field-error" th:if="${#fields.hasErrors('code')}" th:errors="*{code}"></small></div><div class="field field-full"><label for="tagline">Short tagline</label><input id="tagline" th:field="*{tagline}" placeholder="For teams finding their rhythm"><small class="field-error" th:if="${#fields.hasErrors('tagline')}" th:errors="*{tagline}"></small></div><div class="field field-full"><label for="description">Description</label><textarea id="description" rows="2" th:field="*{description}" placeholder="What kind of business is this plan right for?"></textarea><small class="field-error" th:if="${#fields.hasErrors('description')}" th:errors="*{description}"></small></div></div>
-        <div class="form-divider"></div>
-        <div class="form-intro"><span class="form-step">02</span><div><h2>Pricing &amp; limits</h2><p>Clear, predictable numbers make for good decisions.</p></div></div>
-        <div class="form-grid form-grid-three"><div class="field"><label for="currency">Currency</label><input id="currency" th:field="*{currency}" maxlength="3" autocapitalize="characters"><small class="field-error" th:if="${#fields.hasErrors('currency')}" th:errors="*{currency}"></small></div><div class="field"><label for="monthlyPrice">Monthly price</label><div class="input-prefix"><span>₹</span><input id="monthlyPrice" type="number" min="0" step="0.01" th:field="*{monthlyPrice}"></div><small class="field-error" th:if="${#fields.hasErrors('monthlyPrice')}" th:errors="*{monthlyPrice}"></small></div><div class="field"><label for="annualPrice">Annual price</label><div class="input-prefix"><span>₹</span><input id="annualPrice" type="number" min="0" step="0.01" th:field="*{annualPrice}"></div><small class="field-error" th:if="${#fields.hasErrors('annualPrice')}" th:errors="*{annualPrice}"></small></div><div class="field"><label for="maxCustomers">Customer limit</label><input id="maxCustomers" type="number" min="1" th:field="*{maxCustomers}"><small class="field-error" th:if="${#fields.hasErrors('maxCustomers')}" th:errors="*{maxCustomers}"></small></div><div class="field"><label for="maxMonthlyInvoices">Invoices / month</label><input id="maxMonthlyInvoices" type="number" min="1" th:field="*{maxMonthlyInvoices}"><small class="field-error" th:if="${#fields.hasErrors('maxMonthlyInvoices')}" th:errors="*{maxMonthlyInvoices}"></small></div><div class="field"><label for="sortOrder">Display order</label><input id="sortOrder" type="number" th:field="*{sortOrder}"></div></div>
-        <div class="form-divider"></div>
-        <div class="form-intro"><span class="form-step">03</span><div><h2>Included bill templates</h2><p>Customers may generate invoices only with these selected templates.</p></div></div>
-        <div class="template-choice-grid"><label class="template-choice" th:each="template : ${templates}"><input type="checkbox" th:field="*{templateIds}" th:value="${template.id}"><span class="template-choice-body"><strong th:text="${template.name}">Classic</strong><small th:text="${template.description}">Balanced and professional.</small><em th:text="${template.style.displayName + ' layout'}">Classic layout</em></span><span class="custom-check"></span></label>
-            <div class="empty-inline" th:if="${#lists.isEmpty(templates)}">Create and publish at least one bill template first.</div>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content page-content-narrow">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Subscription management</span>
+                    <h1 th:text="${formTitle}">Add subscription plan</h1>
+                    <p class="page-lede">A plan bundles the invoice templates, quotas and audit entitlements an account gets. Saving is immediate for both customers and administrators — there is no checkout in this workspace.</p>
+                </div>
+                <div class="button-group"><a class="button button-quiet" th:href="@{/admin/plans}">Cancel</a></div>
+            </section>
+
+            <p class="form-banner" th:if="${#fields.hasErrors('global')}" role="alert">
+                <span aria-hidden="true">!</span>
+                <span th:each="err : ${#fields.errors('global')}" th:text="${err}">The plan could not be saved.</span>
+            </p>
+
+            <form method="post" th:action="@{${formAction}}" th:object="${planForm}" novalidate>
+                <details class="form-section" id="section-general" open>
+                    <summary><div><h2>General</h2><p>How the plan is named, priced and sold.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="name">Plan name <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="name" type="text" maxlength="100" required th:field="*{name}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('name')}">
+                                <span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="code">Code <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="code" type="text" maxlength="40" required pattern="[A-Za-z0-9_-]+" th:field="*{code}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('code')}">
+                                <span class="field-help">Letters, digits, dash and underscore only. Used in exports and APIs; must be unique.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('code')}" th:errors="*{code}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="tagline">Tagline</label>
+                                <input id="tagline" type="text" maxlength="160" th:field="*{tagline}">
+                            </div>
+                            <div class="field">
+                                <label for="description">Description</label>
+                                <textarea id="description" rows="2" maxlength="500" th:field="*{description}"></textarea>
+                            </div>
+                            <div class="field">
+                                <label for="monthlyPrice">Monthly price <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="monthlyPrice" type="number" min="0" step="0.01" required th:field="*{monthlyPrice}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('monthlyPrice')}">
+                                <span class="field-error" th:if="${#fields.hasErrors('monthlyPrice')}" th:errors="*{monthlyPrice}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="annualPrice">Yearly price <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="annualPrice" type="number" min="0" step="0.01" required th:field="*{annualPrice}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('annualPrice')}">
+                                <span class="field-error" th:if="${#fields.hasErrors('annualPrice')}" th:errors="*{annualPrice}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="currency">Currency <span class="field-required" aria-hidden="true">*</span></label>
+                                <input id="currency" type="text" maxlength="3" size="3" required th:field="*{currency}"
+                                       th:attr="aria-invalid=${#fields.hasErrors('currency')}">
+                                <span class="field-help">Three-letter ISO code, e.g. INR.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('currency')}" th:errors="*{currency}" role="alert"></span>
+                            </div>
+                            <div class="field">
+                                <label for="billingCycle">Billing cycle</label>
+                                <select id="billingCycle" th:field="*{billingCycle}">
+                                    <option th:each="cycle : ${billingCycles}" th:value="${cycle}" th:text="${cycle.label}">Monthly</option>
+                                </select>
+                                <span class="field-help">Sets the length of the term a subscription runs for.</span>
+                            </div>
+                            <div class="field">
+                                <label for="billingPeriodDays">Cycle days (custom only)</label>
+                                <input id="billingPeriodDays" type="number" min="1" th:field="*{billingPeriodDays}" placeholder="30">
+                                <span class="field-help">Used when the cycle is CUSTOM.</span>
+                            </div>
+                            <div class="field">
+                                <label for="gracePeriodDays">Grace period (days)</label>
+                                <input id="gracePeriodDays" type="number" min="0" th:field="*{gracePeriodDays}">
+                                <span class="field-help">Extra days after term end before the plan stops granting entitlements.</span>
+                            </div>
+                            <div class="field">
+                                <label for="sortOrder">Sort order</label>
+                                <input id="sortOrder" type="number" th:field="*{sortOrder}">
+                            </div>
+                            <div class="field">
+                                <span class="field-label">Visibility</span>
+                                <div class="switch-row">
+                                    <label class="check-row" for="active"><input id="active" type="checkbox" th:field="*{active}"><span>Active — selectable by customers</span></label>
+                                    <label class="check-row" for="featured"><input id="featured" type="checkbox" th:field="*{featured}"><span>Featured on the pricing page</span></label>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="planStartOn">Available from</label>
+                                <input id="planStartOn" type="date" th:field="*{planStartOn}">
+                            </div>
+                            <div class="field">
+                                <label for="planEndOn">Available until</label>
+                                <input id="planEndOn" type="date" th:field="*{planEndOn}">
+                                <span class="field-help">Once this date passes the plan cannot be reactivated — it is retired instead.</span>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="form-section" id="section-invoices" open>
+                    <summary><div><h2>Invoice configuration</h2><p>Which templates the plan unlocks and what happens when the quota runs out.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="maxMonthlyInvoices">Maximum invoices per period</label>
+                                <input id="maxMonthlyInvoices" type="number" min="1" th:field="*{maxMonthlyInvoices}">
+                                <span class="field-help">Counted inside the billing window of each subscription.</span>
+                            </div>
+                            <div class="field">
+                                <label for="maxProducts">Maximum catalogue items</label>
+                                <input id="maxProducts" type="number" min="1" th:field="*{maxProducts}">
+                            </div>
+                            <div class="field">
+                                <label for="maxCustomTemplates">Maximum customer-designed templates</label>
+                                <input id="maxCustomTemplates" type="number" min="0" th:field="*{maxCustomTemplates}">
+                            </div>
+                            <div class="field">
+                                <label for="maxCustomers">Seats</label>
+                                <input id="maxCustomers" type="number" min="1" th:field="*{maxCustomers}">
+                            </div>
+                            <div class="field">
+                                <label for="overLimitBehavior">When the limit is reached</label>
+                                <select id="overLimitBehavior" th:field="*{overLimitBehavior}">
+                                    <option th:each="behavior : ${overLimitBehaviors}" th:value="${behavior}" th:text="${behavior.label}">Block</option>
+                                </select>
+                                <span class="field-help">Recorded on the invoice attempt and in the audit trail either way.</span>
+                            </div>
+                            <div class="field">
+                                <label for="usageWarningPercent">Warn at percent of limit</label>
+                                <input id="usageWarningPercent" type="number" min="1" max="100" th:field="*{usageWarningPercent}">
+                            </div>
+                            <div class="field">
+                                <span class="field-label">Usage notifications</span>
+                                <div class="switch-row">
+                                    <label class="check-row" for="notifyAtWarning"><input id="notifyAtWarning" type="checkbox" th:field="*{notifyAtWarning}"><span>Warn before the limit</span></label>
+                                    <label class="check-row" for="notifyAtLimit"><input id="notifyAtLimit" type="checkbox" th:field="*{notifyAtLimit}"><span>Notify when it is exhausted</span></label>
+                                </div>
+                                <span class="field-help">Both are delivered by the dynamic notification rules that target this plan — see notification management.</span>
+                            </div>
+                        </div>
+
+                        <div class="pick-head"><span></span><span>Permitted invoice templates</span><span>Description</span><span>Status</span><span></span><span></span></div>
+                        <div class="pick-list">
+                            <label class="pick-row" th:each="tpl : ${templates}">
+                                <input type="checkbox" th:id="'tpl-' + ${tpl.id}" th:field="*{templateIds}" th:value="${tpl.id}">
+                                <span><strong th:text="${tpl.name}">Classic</strong><small th:text="${tpl.code}">CLASSIC</small></span>
+                                <small th:text="${tpl.description != null ? tpl.description : '—'}">—</small>
+                                <span class="badge" th:classappend="${tpl.active} ? 'status-active' : 'status-inactive'" th:text="${tpl.active ? 'Active' : 'Inactive'}">Active</span>
+                                <span class="table-secondary" th:text="'v' + ${tpl.version}">v1</span>
+                                <span class="table-secondary">tick to permit</span>
+                            </label>
+                            <p class="empty-inline" th:if="${#lists.isEmpty(templates)}">No active invoice templates exist. Create one in the template library first — an inactive or retired template can never be attached.</p>
+                        </div>
+                        <p class="form-banner"><span aria-hidden="true">!</span>
+                            <span>Only active templates can be attached: validation rejects an inactive or soft-deleted selection, and detaching a template never rewrites invoices that already used it.</span></p>
+                    </div>
+                </details>
+
+                <details class="form-section" id="section-audit" open>
+                    <summary><div><h2>Audit configuration</h2><p>Which events an account on this plan may record, how many, and for how long they are kept.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="auditDailyLimit">Audit events per day</label>
+                                <input id="auditDailyLimit" type="number" min="1" th:field="*{auditDailyLimit}" placeholder="No cap">
+                            </div>
+                            <div class="field">
+                                <label for="auditMonthlyLimit">Audit events per month</label>
+                                <input id="auditMonthlyLimit" type="number" min="1" th:field="*{auditMonthlyLimit}" placeholder="No cap">
+                            </div>
+                            <div class="field">
+                                <label for="auditYearlyLimit">Audit events per year</label>
+                                <input id="auditYearlyLimit" type="number" min="1" th:field="*{auditYearlyLimit}" placeholder="No cap">
+                            </div>
+                            <div class="field">
+                                <label for="auditDefaultRetentionDays">Retention (days)</label>
+                                <input id="auditDefaultRetentionDays" type="number" min="1" th:field="*{auditDefaultRetentionDays}">
+                                <span class="field-help">Retention is independent of the quota: older records are purged by the scheduled task, quotas only count the current window.</span>
+                            </div>
+                        </div>
+
+                        <div class="pick-head"><span></span><span>Permitted audit types</span><span>Category</span><span>Limit</span><span>Period</span><span>Status</span></div>
+                        <div class="pick-list">
+                            <label class="pick-row" th:each="type : ${auditTypes}">
+                                <input type="checkbox" th:id="'audit-' + ${type.id}" th:field="*{auditTypeIds}" th:value="${type.id}">
+                                <span><strong th:text="${type.name}">Login</strong><small th:text="${type.code}">LOGIN</small></span>
+                                <small th:text="${type.eventCategory.label}">Security</small>
+                                <small th:text="${type.hasQuota() ? type.usageLimit + ' events' : 'not capped'}">—</small>
+                                <small th:text="${type.limitPeriod != null ? type.limitPeriod.label : 'no period'}">Daily</small>
+                                <span class="badge" th:classappend="${type.active} ? 'status-active' : 'status-inactive'" th:text="${type.active ? 'Active' : 'Inactive'}">Active</span>
+                            </label>
+                            <p class="empty-inline" th:if="${#lists.isEmpty(auditTypes)}">No active audit types. Register them under audit management first.</p>
+                        </div>
+                        <p class="form-banner is-info"><span aria-hidden="true">i</span>
+                            <span>Per-event quotas and alert thresholds live on the audit type itself, so one definition behaves the same on every plan; the caps above are the plan-wide ceiling.</span></p>
+                    </div>
+                </details>
+
+                <details class="form-section" id="section-extras">
+                    <summary><div><h2>Renewal, expiry and permissions</h2><p>Optional rules applied when a term ends or a customer wants to change plan.</p></div></summary>
+                    <div class="form-section-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label for="expiryReminderDays">Expiry reminder offsets</label>
+                                <input id="expiryReminderDays" type="text" maxlength="40" th:field="*{expiryReminderDays}" placeholder="30,7,3,1">
+                                <span class="field-help">Comma-separated days before term end. Each offset fires at most once per subscription.</span>
+                            </div>
+                            <div class="field">
+                                <label for="customPeriodDays">Custom audit window (days)</label>
+                                <input id="customPeriodDays" type="number" min="1" th:field="*{customPeriodDays}">
+                            </div>
+                            <div class="field">
+                                <span class="field-label">Change permissions</span>
+                                <div class="switch-row">
+                                    <label class="check-row" for="autoRenewalAllowed"><input id="autoRenewalAllowed" type="checkbox" th:field="*{autoRenewalAllowed}"><span>Allow renewal without an administrator</span></label>
+                                    <label class="check-row" for="allowMidtermUpgrade"><input id="allowMidtermUpgrade" type="checkbox" th:field="*{allowMidtermUpgrade}"><span>Allow mid-term upgrade</span></label>
+                                    <label class="check-row" for="allowDowngrade"><input id="allowDowngrade" type="checkbox" th:field="*{allowDowngrade}"><span>Allow downgrade at term end</span></label>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label for="features">Feature list</label>
+                                <textarea id="features" rows="5" maxlength="5000" required th:field="*{features}"
+                                          th:attr="aria-invalid=${#fields.hasErrors('features')}"
+                                          aria-describedby="features-help"></textarea>
+                                <span class="field-help" id="features-help">One item per line; shown verbatim on the public pricing page.</span>
+                                <span class="field-error" th:if="${#fields.hasErrors('features')}" th:errors="*{features}" role="alert"></span>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <div class="form-actions">
+                    <button class="button button-primary" type="submit" data-busy-label="Saving"><span aria-hidden="true">✓</span> Save plan</button>
+                    <a class="button" th:href="@{/admin/plans}">Discard</a>
+                    <span class="spacer"></span>
+                    <span class="field-help">Deactivating later never cancels an existing subscription; it only closes the plan to new subscribers.</span>
+                </div>
+            </form>
         </div>
-        <div class="global-errors" th:if="${#fields.hasErrors('templateIds')}"><p th:errors="*{templateIds}">Choose at least one template.</p></div>
-        <div class="form-divider"></div>
-        <div class="form-intro"><span class="form-step form-step-soft">04</span><div><h2>Included features</h2><p>One feature per line. Keep it easy to scan.</p></div></div>
-        <div class="field"><label for="features">What’s included <span class="required">*</span></label><textarea id="features" rows="6" th:field="*{features}" placeholder="Unlimited invoices&#10;Customer directory&#10;Product and category management"></textarea><small class="field-help">Each line is shown as one feature on the public plans page.</small><small class="field-error" th:if="${#fields.hasErrors('features')}" th:errors="*{features}"></small></div>
-        <div class="form-divider"></div><div class="form-grid"><div class="field"><label class="check-field"><input type="checkbox" th:field="*{featured}"><span class="custom-check"></span><span><strong>Highlight this plan</strong><small>Give it extra emphasis on the public page.</small></span></label></div><div class="field"><label class="check-field"><input type="checkbox" th:field="*{active}"><span class="custom-check"></span><span><strong>Show this plan to customers</strong><small>Hidden plans cannot be purchased by customers.</small></span></label></div></div>
-        <div class="global-errors" th:if="${#fields.hasGlobalErrors()}"><p th:each="err : ${#fields.globalErrors()}" th:text="${err}">Please check the plan.</p></div>
-        <div class="form-actions"><a class="button button-quiet" th:href="@{/admin/plans}">Cancel</a><button class="button button-primary" type="submit">Save plan <span>→</span></button></div>
-    </form>
-</div></main></div></body></html>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

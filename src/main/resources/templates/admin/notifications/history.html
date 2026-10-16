@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Notification delivery history')}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="page-title-row">
+                <div>
+                    <span class="kicker">Dynamic notification management</span>
+                    <h1 th:text="${notification != null ? 'Deliveries · ' + notification.name : 'Delivery history'}">Delivery history</h1>
+                    <p class="page-lede">Every send is recorded with its recipient, channel, rendered text and outcome. A failure keeps the reason the transport returned, and the idempotency key proves a recipient was not messaged twice.</p>
+                </div>
+                <div class="button-group">
+                    <a class="button" th:if="${notification != null}" th:href="@{/admin/notifications/{id}/edit(id=${notification.id})}">Edit rule</a>
+                    <a class="button button-quiet" th:href="@{/admin/notifications}">Back to rules</a>
+                </div>
+            </section>
+
+            <form class="panel list-panel" method="get" th:action="@{/admin/notifications/history}" th:if="${notification == null}">
+                <div class="filter-bar">
+                    <div class="filter-field">
+                        <label for="trigger-filter">Trigger</label>
+                        <select id="trigger-filter" name="trigger">
+                            <option value="">Any trigger</option>
+                            <option th:each="item : ${triggers}" th:value="${item.name()}" th:text="${item.label}"
+                                    th:selected="${trigger != null and trigger == item.name()}">Subscription expiring</option>
+                        </select>
+                    </div>
+                    <div class="filter-field" th:if="${statuses != null}">
+                        <label for="status-filter">Delivery status</label>
+                        <select id="status-filter" name="status">
+                            <option value="">Any status</option>
+                            <option th:each="item : ${statuses}" th:value="${item.name()}" th:text="${item.label}"
+                                    th:selected="${deliveryStatus != null and deliveryStatus == item.name()}">Sent</option>
+                        </select>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="button button-primary button-small" type="submit">Apply</button>
+                        <a class="button button-quiet button-small" th:href="@{/admin/notifications/history}">Reset</a>
+                    </div>
+                </div>
+            </form>
+
+            <section class="panel list-panel">
+                <div class="list-toolbar">
+                    <div class="list-count"><span class="count-dot" aria-hidden="true"></span>
+                        <strong th:text="${deliveries.totalElements}">0</strong> recorded deliver(s)</div>
+                    <p class="toolbar-note">Newest first, capped at the most recent 100 rows for this view.</p>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th scope="col">ID</th><th scope="col">Recorded</th><th scope="col">Notification</th>
+                            <th scope="col">Trigger</th><th scope="col">Channel</th><th scope="col">Recipient</th>
+                            <th scope="col">Status</th><th scope="col">Sent</th><th scope="col">Failure reason</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="row : ${deliveries.content}">
+                            <td><span class="table-id" th:text="'#' + ${row.id}">#0</span></td>
+                            <td class="nowrap" th:text="${row.createdAt}">2026-01-01T09:00Z</td>
+                            <td><span class="table-primary" th:text="${row.notificationName}">Expiry warning</span>
+                                <span class="table-secondary" th:text="${row.title}">title</span></td>
+                            <td><code th:text="${row.triggerEvent}">SUBSCRIPTION_EXPIRING_7</code>
+                                <span class="table-secondary" th:if="${row.jobId != null}" th:text="'job #' + ${row.jobId}">job</span></td>
+                            <td><span class="badge badge-muted" th:text="${row.channel.label}">Email</span></td>
+                            <td><span class="table-primary" th:text="${row.recipient}">a@b.test</span>
+                                <span class="table-secondary" th:if="${row.customer != null}" th:text="${row.customer.companyName}">Company</span></td>
+                            <td><span class="badge" th:classappend="${row.status.name() == 'SENT' ? 'status-active' : (row.status.name() == 'FAILED' ? 'status-failed' : (row.status.name() == 'SIMULATED' ? 'status-draft' : 'status-pending'))}"
+                                     th:text="${row.status.label}">Sent</span></td>
+                            <td class="nowrap" th:text="${row.sentAt != null ? row.sentAt : '—'}">—</td>
+                            <td class="wrap-cell">
+                                <span th:if="${row.failureReason != null}" class="table-error-cell" th:text="${row.failureReason}">timeout</span>
+                                <span th:if="${row.failureReason == null}" class="table-secondary">—</span>
+                                <span class="table-secondary" th:attr="title=${row.idempotencyKey}" th:text="'key: ' + ${row.idempotencyKey}">key</span>
+                            </td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(deliveries.content)}"><td colspan="9">
+                            <div th:replace="~{fragments/components :: empty('✉', 'No deliveries recorded', 'Nothing has been sent through this rule yet. Once it fires, each recipient gets a row here with its outcome — including failures and simulated sends.', null, null)}"></div>
+                        </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <th:block th:if="${notification != null}">
+                <section class="panel">
+                    <div class="panel-heading"><div><span class="kicker">AS CONFIGURED</span><h2>Rule definition</h2></div>
+                        <a class="text-link" th:href="@{/admin/notifications/{id}/edit(id=${notification.id})}">Edit <span aria-hidden="true">→</span></a></div>
+                    <div class="panel-body">
+                        <dl class="grid-kv">
+                            <dt>Channel</dt><dd th:text="${notification.channel.label}">Email</dd>
+                            <dt>Trigger</dt><dd><code th:text="${notification.triggerEvent.name()}">X</code> <span th:text="${notification.triggerEvent.label}">label</span></dd>
+                            <dt>Recipients</dt><dd th:text="${notification.recipientType.label} + ' · ' + ${notification.statusFilter.label}">Customer accounts · Every account</dd>
+                            <dt>Plan filter</dt><dd th:text="${notification.planFilter != null and !#strings.isEmpty(notification.planFilter)} ? ${notification.planFilter} : 'Every plan'">Every plan</dd>
+                            <dt>Schedule</dt><dd><code th:if="${notification.scheduleExpression != null and !#strings.isEmpty(notification.scheduleExpression)}" th:text="${notification.scheduleExpression}">cron</code>
+                                <span th:if="${notification.scheduleExpression == null or #strings.isEmpty(notification.scheduleExpression)}">On trigger only</span></dd>
+                            <dt>State</dt><dd><span class="badge" th:classappend="${notification.active ? 'status-active' : 'status-paused'}" th:text="${notification.active ? 'Active' : 'Inactive'}">Active</span></dd>
+                        </dl>
+                    </div>
+                </section>
+            </th:block>
+
+            <div th:replace="~{fragments/components :: pagination(${deliveries}, ${notification != null ? '/admin/notifications/' + notification.id + '/history' : '/admin/notifications/history'}, ${currentQuery})}"></div>
+
+            <footer class="page-footer">
+                <span>Delivery rows are append-only: a failed send is retried with the same idempotency key rather than rewritten.</span>
+            </footer>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

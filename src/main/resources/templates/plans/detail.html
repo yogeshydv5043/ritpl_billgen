@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(${plan.name})}"></head>
+<body class="app-body">
+<div class="app-layout">
+    <div class="nav-scrim" onclick="BillGen.toggleNav(false)"></div>
+    <aside th:replace="~{fragments/layout :: sidebar}"></aside>
+    <main class="app-main">
+        <header th:replace="~{fragments/layout :: topbar}"></header>
+        <div class="page-content">
+            <nav th:replace="~{fragments/layout :: breadcrumbs}"></nav>
+            <div th:replace="~{fragments/layout :: flash}"></div>
+
+            <section class="profile-head-card">
+                <div class="profile-identity">
+                    <span class="profile-avatar" aria-hidden="true" th:text="${#strings.substring(plan.name, 0, 1).toUpperCase()}">S</span>
+                    <div class="profile-identity-copy">
+                        <span class="kicker">Plan <span th:text="'#' + ${plan.id}">#0</span> · code <span th:text="${plan.code}">CODE</span></span>
+                        <h1 th:text="${plan.name}">Growth</h1>
+                        <p th:text="${plan.tagline != null ? plan.tagline : plan.description}">tagline</p>
+                        <p class="badge-row">
+                            <span class="badge" th:classappend="${plan.active} ? 'status-active' : 'status-inactive'" th:text="${plan.active ? 'Active' : 'Inactive'}">Active</span>
+                            <span class="badge badge-info" th:if="${plan.featured}">Featured</span>
+                            <span class="table-secondary" th:text="'sale window: ' + (plan.planStartOn != null ? plan.planStartOn : 'open') + ' → ' + (plan.planEndOn != null ? plan.planEndOn : 'open')">window</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="profile-actions">
+                    <a class="button button-primary" th:href="@{/admin/plans/{id}/edit(id=${plan.id})}">Edit plan</a>
+                    <a class="button" th:href="@{/admin/plans}">Back to plans</a>
+                </div>
+            </section>
+
+            <div class="stat-row">
+                <div class="stat"><b th:text="${subscriberCount}">0</b><span>Accounts subscribed</span></div>
+                <div class="stat"><b th:text="${grandfatheredCount}">0</b><span>Counted against quotas</span></div>
+                <div class="stat"><b th:text="${#lists.size(plan.templates)}">0</b><span>Permitted templates</span></div>
+                <div class="stat"><b th:text="${auditTypeCount}">0</b><span>Permitted audit types</span></div>
+                <div class="stat"><b th:text="${plan.usageWarningPercent} + '%'">80%</b><span>Warning threshold</span></div>
+            </div>
+
+            <div class="grid-2">
+                <section class="panel">
+                    <div class="panel-heading"><div><span class="kicker">GENERAL</span><h2>Plan details</h2></div></div>
+                    <div class="panel-body">
+                        <dl class="grid-kv">
+                            <dt>Description</dt><dd th:text="${plan.description != null ? plan.description : 'No description recorded.'}">—</dd>
+                            <dt>Monthly price</dt><dd><span th:text="${plan.currency}">INR</span> <span th:text="${#numbers.formatDecimal(plan.monthlyPrice, 1, 'COMMA', 2, 'POINT')}">0.00</span></dd>
+                            <dt>Annual price</dt><dd><span th:text="${plan.currency}">INR</span> <span th:text="${#numbers.formatDecimal(plan.annualPrice, 1, 'COMMA', 2, 'POINT')}">0.00</span></dd>
+                            <dt>Billing cycle</dt><dd th:text="${plan.billingCycle.label + (plan.billingPeriodDays != null ? ' · ' + plan.billingPeriodDays + ' days' : '')}">Monthly</dd>
+                            <dt>Grace period</dt><dd th:text="${plan.gracePeriodDays} + ' day(s) after term end'">0 day(s)</dd>
+                            <dt>Seats</dt><dd th:text="${plan.maxCustomers} + ' user(s)'">0</dd>
+                            <dt>Auto-renewal</dt><dd th:text="${plan.autoRenewalAllowed ? 'Allowed — customers may renew without an admin' : 'Administrator assignment only'}">Allowed</dd>
+                            <dt>Changes</dt><dd>Downgrades <span th:text="${plan.allowDowngrade ? 'allowed' : 'blocked'}">allowed</span> · mid-term upgrades <span th:text="${plan.allowMidtermUpgrade ? 'allowed' : 'blocked'}">allowed</span></dd>
+                            <dt>Expiry reminders</dt><dd th:text="'at ' + ${plan.expiryReminderDays} + ' day(s) before term end'">at 30,7,3,1</dd>
+                            <dt>Features</dt><dd><span class="tag" th:each="feature : ${#strings.arraySplit(plan.features, '\n')}" th:text="${feature}" style="margin-right:6px">Feature</span>
+                                <span th:if="${#strings.isEmpty(plan.features)}">—</span></dd>
+                            <dt>Last updated</dt><dd><span th:text="${plan.updatedAt != null ? plan.updatedAt : plan.createdAt}">—</span><span class="table-secondary" th:if="${plan.updatedBy != null}" th:text="'by ' + ${plan.updatedBy}">by</span></dd>
+                        </dl>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-heading"><div><span class="kicker">QUOTAS</span><h2>Invoice &amp; audit limits</h2></div></div>
+                    <div class="panel-body">
+                        <dl class="grid-kv">
+                            <dt>Invoices per term</dt><dd th:text="${plan.maxMonthlyInvoices}">0</dd>
+                            <dt>Products</dt><dd th:text="${plan.maxProducts}">0</dd>
+                            <dt>Custom templates</dt><dd th:text="${plan.maxCustomTemplates}">0</dd>
+                            <dt>Over the limit</dt><dd><span class="badge badge-warn" th:text="${plan.overLimitBehavior.label}">Block</span>
+                                <span class="table-secondary">applies when an account reaches its invoice quota in the current window</span></dd>
+                            <dt>Usage notifications</dt><dd><span th:text="${plan.notifyAtWarning ? 'At ' + plan.usageWarningPercent + '%' : 'No warning'}">At 80%</span> ·
+                                <span th:text="${plan.notifyAtLimit ? 'at the limit' : 'no limit alert'}">at the limit</span></dd>
+                            <dt>Audit quota</dt><dd><span th:text="${plan.auditDailyLimit != null ? plan.auditDailyLimit + ' events / day' : 'No daily cap'}">—</span> ·
+                                <span th:text="${plan.auditMonthlyLimit != null ? plan.auditMonthlyLimit + ' / month' : 'no monthly cap'}">—</span> ·
+                                <span th:text="${plan.auditYearlyLimit != null ? plan.auditYearlyLimit + ' / year' : 'no yearly cap'}">—</span></dd>
+                            <dt>Audit retention</dt><dd th:text="${plan.auditDefaultRetentionDays} + ' days'">730 days</dd>
+                        </dl>
+                        <p class="form-banner is-info"><span aria-hidden="true">i</span>
+                            <span>Retention is separate from the quota: records older than the retention window are purged by the scheduled task, while quota windows only count events inside the current period.</span></p>
+                    </div>
+                </section>
+            </div>
+
+            <section class="panel">
+                <div class="panel-heading"><div><span class="kicker">ENTITLEMENTS</span><h2>Permitted invoice templates</h2></div>
+                    <a class="text-link" th:href="@{/admin/templates}">Template library <span aria-hidden="true">→</span></a></div>
+                <div class="panel-body">
+                    <div th:if="${#lists.isEmpty(plan.templates)}" class="empty-inline">
+                        <span class="empty-icon" aria-hidden="true">▤</span><strong>No templates permitted</strong>
+                        <span>Accounts on this plan cannot create invoices until at least one template is permitted here.</span>
+                    </div>
+                    <table class="mini-table" th:if="${!#lists.isEmpty(plan.templates)}">
+                        <thead><tr><th scope="col">Name</th><th scope="col">Description</th><th scope="col">Style</th><th scope="col">Version</th><th scope="col">Status</th></tr></thead>
+                        <tbody>
+                        <tr th:each="tpl : ${plan.templates}">
+                            <td><span class="table-primary" th:text="${tpl.name}">Classic</span><span class="table-secondary" th:text="${tpl.code}">CLASSIC</span></td>
+                            <td th:text="${tpl.description != null ? tpl.description : '—'}">—</td>
+                            <td th:text="${tpl.style.displayName}">Classic</td>
+                            <td><span class="badge badge-muted" th:text="'v' + ${tpl.version}">v1</span></td>
+                            <td><span class="badge" th:classappend="${tpl.active} ? 'status-active' : 'status-inactive'" th:text="${tpl.active ? 'Active' : 'Inactive'}">Active</span></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-heading"><div><span class="kicker">ENTITLEMENTS</span><h2>Permitted audit types</h2></div>
+                    <a class="text-link" th:href="@{/admin/audit-types}">Audit type registry <span aria-hidden="true">→</span></a></div>
+                <div class="panel-body">
+                    <div th:if="${#lists.isEmpty(plan.auditTypes)}" class="empty-inline">
+                        <span class="empty-icon" aria-hidden="true">◷</span><strong>No audit types assigned</strong>
+                        <span>The plan's own daily/monthly caps still apply; type-level limits only apply to types listed here.</span>
+                    </div>
+                    <table class="mini-table" th:if="${!#lists.isEmpty(plan.auditTypes)}">
+                        <thead><tr><th scope="col">Name</th><th scope="col">Category</th><th scope="col">Limit</th><th scope="col">Limit period</th><th scope="col">Retention</th><th scope="col">Alert at</th><th scope="col">Status</th></tr></thead>
+                        <tbody>
+                        <tr th:each="type : ${plan.auditTypes}">
+                            <td><span class="table-primary" th:text="${type.name}">Login</span><span class="table-secondary" th:text="${type.code}">LOGIN</span></td>
+                            <td th:text="${type.eventCategory.label}">Security</td>
+                            <td th:text="${type.hasQuota() ? type.usageLimit + ' events' : 'Not capped'}">—</td>
+                            <td><span th:text="${type.limitPeriod != null ? type.limitPeriod.label : 'No limit'}">Daily</span>
+                                <span class="table-secondary" th:if="${type.limitPeriod != null and type.limitPeriod.name() == 'CUSTOM' and type.customPeriodDays != null}"
+                                      th:text="${type.customPeriodDays} + ' day window'">window</span></td>
+                            <td th:text="${type.retentionDays} + ' days'">730 days</td>
+                            <td th:text="${type.alertThresholdPercent} + '%'">80%</td>
+                            <td><span class="badge" th:classappend="${type.active} ? 'status-active' : 'status-inactive'" th:text="${type.active ? 'Active' : 'Inactive'}">Active</span></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <footer class="page-footer">
+                <span>This is a read-only view of the plan as subscribers see it. Use <em>Edit plan</em> to change entitlements.</span>
+                <a th:href="@{/admin/plans}">All plans <span aria-hidden="true">→</span></a>
+            </footer>
+        </div>
+    </main>
+</div>
+<div th:replace="~{fragments/components :: confirmHost}"></div>
+<div th:replace="~{fragments/components :: toastHost}"></div>
+</body>
+</html>

@@ -18,8 +18,17 @@ public class AppUserPrincipal implements UserDetails {
     private final boolean enabled;
 
     public AppUserPrincipal(AppUser user, Long customerId) {
+        this(user, customerId, true);
+    }
+
+    /**
+     * @param accountUsable false when the customer account behind this login is disabled or deleted;
+     *        it is ANDed with the login's own switch so either one blocks authentication.
+     */
+    public AppUserPrincipal(AppUser user, Long customerId, boolean accountUsable) {
         this.id = user.getId(); this.customerId = customerId; this.email = user.getEmail();
-        this.passwordHash = user.getPasswordHash(); this.role = user.getRole().name(); this.enabled = user.isEnabled();
+        this.passwordHash = user.getPasswordHash(); this.role = user.getRole().name();
+        this.enabled = user.isEnabled() && accountUsable;
     }
     public Long getId() { return id; }
     /** The customer account this login belongs to, or {@code null} for an administrator. */
