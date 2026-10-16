@@ -112,7 +112,7 @@ class FlywayMigrationFilesTest {
         return (int) crc.getValue();
     }
 
-    private static int highest() throws IOException {
+    private int highest() throws IOException {
         return versions().get(versions().size() - 1);
     }
 
